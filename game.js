@@ -148,7 +148,16 @@
       this._firePrev = input.fire;
       if (this.state === 'menu') {
         this.time += dt;
-        if (firePressed) this.start();
+        // launch sequence: the hero ship flies off into the horizon, then play begins
+        if (firePressed && !this.launching) {
+          this.launching = true;
+          this.launchT = 0;
+          this.sfx.play('launch');
+        }
+        if (this.launching) {
+          this.launchT += dt;
+          if (this.launchT > 1.05) { this.launching = false; this.start(); }
+        }
         return;
       }
       if (this.state === 'over') {
@@ -1629,8 +1638,13 @@
       const intro = Math.min(1, T / 1.7);
       const c1 = 1.1, c3 = c1 + 1; // ease-out-back: slight overshoot, then settle
       const eb = 1 + c3 * Math.pow(intro - 1, 3) + c1 * Math.pow(intro - 1, 2);
-      const sy = (H + 150) + (516 - (H + 150)) * eb;
-      const thrust = 1 + (1 - intro) * 1.3; // burning hard during the climb
+      // fly-off: on launch the ship recedes into the horizon's vanishing point
+      // (shrinks low and away — it never climbs over the instructions)
+      const lp = g.launching ? Math.min(1, g.launchT / 1.05) : 0;
+      const le = lp * lp * lp; // accelerate away
+      const sy = ((H + 150) + (516 - (H + 150)) * eb) + (531 - 516) * le;
+      const Sfx2 = S * (1 - 0.94 * le);
+      const thrust = (1 + (1 - intro) * 1.3) * (1 + 2.2 * lp); // burn hard on climb + departure
       // ascent speed-lines streaking past (fiercer during the climb)
       for (let i = 0; i < 6; i++) {
         const lx = sx + [-96, -64, 66, 98, -128, 126][i];
@@ -1646,9 +1660,9 @@
       bl.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = bl; ctx.fillRect(sx - 135, sy - 135, 270, 270);
       ctx.save();
-      ctx.translate(sx, sy + Math.sin(T * 1.8) * 5 * intro); // hover bob once settled
-      ctx.rotate(Math.sin(T * 0.9) * 0.03 * intro);
-      ctx.scale(S, S);
+      ctx.translate(sx, sy + Math.sin(T * 1.8) * 5 * intro * (1 - lp)); // hover bob once settled
+      ctx.rotate(Math.sin(T * 0.9) * 0.03 * intro * (1 - lp));
+      ctx.scale(Sfx2, Sfx2);
       // engine flame — layered, flickering, stretched by thrust
       const fl = (11 + Math.sin(T * 26) * 2.5 + Math.sin(T * 47) * 1.2) * thrust;
       this.glow(ctx, '#4df3ff', 22);
@@ -1692,6 +1706,17 @@
       ctx.beginPath(); ctx.arc(13.4, 8, 0.9, 0, TAU); ctx.fill();
       this.noGlow(ctx);
       ctx.restore();
+      // departure flare as the ship vanishes into the horizon
+      if (lp > 0.75) {
+        const fa = (lp - 0.75) / 0.25;
+        const frad = 12 + fa * 42;
+        const fgl = ctx.createRadialGradient(sx, 531, 0, sx, 531, frad);
+        fgl.addColorStop(0, 'rgba(255,255,255,' + (0.85 * (1 - fa * 0.4)).toFixed(2) + ')');
+        fgl.addColorStop(0.5, 'rgba(120,220,255,' + (0.5 * (1 - fa * 0.3)).toFixed(2) + ')');
+        fgl.addColorStop(1, 'rgba(77,163,255,0)');
+        ctx.fillStyle = fgl;
+        ctx.fillRect(sx - frad, 531 - frad, frad * 2, frad * 2);
+      }
 
       // --- title: chromatic glow + bob ---
       const ty = H * 0.24 + Math.sin(T * 1.6) * 4;
@@ -1755,14 +1780,18 @@
       ctx.fillStyle = 'rgba(185,215,250,0.75)'; ctx.font = '11px monospace';
       ctx.fillText('collect chips to level up · clear stages to raise the level cap', W / 2, 330);
 
-      // blinking prompt — below the void, resting on the grid
-      ctx.fillStyle = 'rgba(3,1,9,0.6)';
-      ctx.fillRect(W / 2 - 160, 610, 320, 30); // backing band so the prompt reads over the grid
-      ctx.globalAlpha = 0.55 + 0.45 * Math.sin(T * 5);
-      ctx.font = 'bold 20px monospace';
-      this.glow(ctx, '#7dff4d', 16); ctx.fillStyle = '#c8ffb0';
-      ctx.fillText(g.isTouch ? 'TAP TO LAUNCH' : 'PRESS SPACE TO LAUNCH', W / 2, 631);
-      this.noGlow(ctx); ctx.globalAlpha = 1;
+      // blinking prompt — resting on the grid; fades out once launch begins
+      const pa2 = g.launching ? Math.max(0, 1 - lp * 3) : 1;
+      if (pa2 > 0) {
+        ctx.globalAlpha = pa2;
+        ctx.fillStyle = 'rgba(3,1,9,0.6)';
+        ctx.fillRect(W / 2 - 160, 610, 320, 30); // backing band so the prompt reads over the grid
+        ctx.globalAlpha = pa2 * (0.55 + 0.45 * Math.sin(T * 5));
+        ctx.font = 'bold 20px monospace';
+        this.glow(ctx, '#7dff4d', 16); ctx.fillStyle = '#c8ffb0';
+        ctx.fillText(g.isTouch ? 'TAP TO LAUNCH' : 'PRESS SPACE TO LAUNCH', W / 2, 631);
+        this.noGlow(ctx); ctx.globalAlpha = 1;
+      }
       ctx.restore();
     },
 
@@ -1900,6 +1929,7 @@
         case 'collect': this.tone(988, 0.05, 'triangle', 0.07); this.tone(1319, 0.07, 'triangle', 0.06, 1, 0.04); this.tone(1760, 0.11, 'triangle', 0.05, 1, 0.09); break;
         case 'victory': [523, 659, 784, 1046, 1319].forEach((f, i) => this.tone(f, 0.5, 'square', 0.07, 1, i * 0.12)); this.tone(1568, 0.9, 'triangle', 0.06, 1, 0.62); break;
         case 'fanfare': [784, 1047, 1319, 1568].forEach((f, i) => this.tone(f, 0.13, 'square', 0.06, 1, i * 0.07)); this.tone(1568, 0.5, 'triangle', 0.06, 1, 0.28); this.tone(2093, 0.5, 'triangle', 0.045, 1, 0.28); break;
+        case 'launch': this.noise(0.95, 0.22); this.tone(80, 0.95, 'sawtooth', 0.12, 3.6); this.tone(52, 0.8, 'sine', 0.16, 2.2); this.tone(320, 0.5, 'triangle', 0.05, 2.6, 0.25); break;
       }
     }
 
