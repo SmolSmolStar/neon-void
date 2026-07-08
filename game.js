@@ -788,8 +788,11 @@
       for (let i = this.drops.length - 1; i >= 0; i--) {
         const d = this.drops[i];
         d.t += dt;
-        // magnet toward player when close
-        if (p.alive && dist2(d.x, d.y, p.x, p.y) < 130 * 130) {
+        // magnet: a short lunge toward the player, then it gives up — so a chip
+        // you brushed but don't want (weapon strategy!) can still be dodged
+        d.magT = d.magT || 0;
+        if (p.alive && d.magT < 0.45 && dist2(d.x, d.y, p.x, p.y) < 110 * 110) {
+          d.magT += dt;
           const a = Math.atan2(p.y - d.y, p.x - d.x);
           d.x += Math.cos(a) * 300 * dt;
           d.y += Math.sin(a) * 300 * dt;
