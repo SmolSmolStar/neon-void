@@ -99,6 +99,7 @@
       this._chip1 = null;      // last two weapon-chip types (anti-streak guard)
       this._chip2 = null;
       this.usedCheats = false; // tainted runs never submit to the leaderboard
+      this._chk = this._mix(0); // score shadow — console edits desync it
       this.shake = 0;
       this.hitstop = 0;
       this.flash = 0;
@@ -124,6 +125,15 @@
     // the first boss; scales up steadily across the 10 stages (then endless).
     difficulty() {
       return 1 + (this.stage - 1) * 0.42 + (this.wave - 1) * 0.05 + this.time * 0.0022;
+    }
+
+    _mix(v) { return ((v | 0) ^ 0x5A17C3E) + 13; }
+
+    // All legitimate scoring flows through here, keeping the shadow checksum
+    // in sync. Direct console edits to .score desync it -> run is tainted.
+    addScore(pts) {
+      this.score += pts;
+      this._chk = this._mix(this.score);
     }
 
     // Weapon power is gated by progression: the level cap rises as you clear
@@ -194,6 +204,26 @@
       this.shake = Math.max(0, this.shake - dt * 30);
       this.flash = Math.max(0, this.flash - dt * 3);
       if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
+
+      // anti-tamper: every 0.7s verify invariants no legitimate play can break;
+      // violations taint the run (leaderboard refuses tainted scores).
+      this._integT = (this._integT || 0) + dt;
+      if (this._integT > 0.7) {
+        this._integT = 0;
+        const testMode = typeof window !== 'undefined' && window.NEONVOID_TEST;
+        if (!testMode && !this.usedCheats) {
+          const pp = this.player;
+          const bad =
+            this._chk !== this._mix(this.score) ||
+            pp.level > this.weaponLevelCap() || pp.level < 1 ||
+            pp.hp > pp.maxHp || pp.maxHp !== 5 || pp.shield > 3 || pp.bombs > 6 ||
+            this.score > 800000 * this.stage ||
+            this.time < (this.stage - 1) * 35 ||
+            (this.score > 5000 && this.kills < 3) ||
+            (typeof window !== 'undefined' && this.god);
+          if (bad) this.usedCheats = true;
+        }
+      }
 
       this.updatePlayer(dt, input);
       this.updateSpawning(dt);
@@ -772,7 +802,7 @@
       this.combo = Math.min(9.9, this.combo + 0.25);
       this.comboT = 2.4;
       const pts = Math.floor(e.score * this.combo);
-      this.score += pts;
+      this.addScore(pts);
       this.floaters.push({ x: e.x, y: e.y, text: '+' + pts, t: 0.9, color: '#ffffff' });
       if (this.combo >= 2 && Math.random() < 0.3)
         this.floaters.push({ x: e.x, y: e.y - 18, text: 'x' + this.combo.toFixed(1), t: 0.8, color: '#ffd25a' });
@@ -792,7 +822,7 @@
         this.waveT = 0;
         // stage-clear bonus: visible payoff for progressing (scales with stage)
         const clearBonus = 1500 * this.stage;
-        this.score += clearBonus;
+        this.addScore(clearBonus);
         this.floaters.push({ x: W / 2, y: H * 0.5, text: 'STAGE CLEAR +' + clearBonus, t: 1.8, color: '#ffd25a' });
         const capBefore = this.weaponLevelCap();
         this.stage++;
@@ -924,11 +954,11 @@
             this.floaters.push({ x: p.x, y: p.y - 44, text: 'LEVEL ' + p.level + '!', t: 1.0, color });
             this.sfx.play('levelup', p.level);
           } else if (p.level >= WEAPONS[w].maxLv) {
-            this.score += 500;
+            this.addScore(500);
             label = WEAPONS[w].name + ' MAX +500';
             this.sfx.play('powerup');
           } else {
-            this.score += 250;
+            this.addScore(250);
             label = 'LV CAP +250';
             // quiet hint only — a big banner here would stomp the STAGE announce
             // (boss drop-showers are collected right at stage transitions)
@@ -946,7 +976,7 @@
         }
       } else if (d.kind === 'heal') {
         if (p.hp < p.maxHp) { p.hp++; label = '+1 HULL'; }
-        else { this.score += 300; label = '+300'; }
+        else { this.addScore(300); label = '+300'; }
         color = '#7dff4d';
         this.sfx.play('heal');
       } else if (d.kind === 'shield') {

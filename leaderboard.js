@@ -472,6 +472,8 @@
 
   function doSubmit(name, score, wave, opts) {
     opts = opts || {}; name = (name || '').trim().slice(0, 20);
+    var gg = window.__game;
+    if (gg && (gg.usedCheats || score > 800000 * Math.max(1, gg.stage || 1))) { setStatus('test run (cheats used) — score not saved', 'err'); return Promise.resolve(false); }
     if (!name) { setStatus('enter a handle to save your score', 'err'); lbEl.input.focus(); return Promise.resolve(false); }
     if (!(score > 0)) { setStatus('play a round first!', ''); return Promise.resolve(false); }
     setName(name); lbEl.save.disabled = true; setStatus(opts.auto ? 'saving your run…' : 'saving…', '');
@@ -551,7 +553,7 @@
     mount(codexPanel, overlay);
     probeWave().then(refresh);
     requestAnimationFrame(tick);
-    window.__lb = {
+    if (typeof window.NEONVOID_TEST !== 'undefined' && window.NEONVOID_TEST) window.__lb = {
       refresh: refresh, submit: doSubmit, fetchBoard: fetchBoard, getPlacement: getPlacement,
       switchBoard: switchBoard, discover: discover, renderCodex: renderCodex, confetti: neonConfetti,
       showOverlay: showOverlay, hideOverlay: hideOverlay,
