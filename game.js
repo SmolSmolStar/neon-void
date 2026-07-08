@@ -790,10 +790,11 @@
       for (let i = this.drops.length - 1; i >= 0; i--) {
         const d = this.drops[i];
         d.t += dt;
-        // magnet: a short lunge toward the player, then it gives up — so a chip
-        // you brushed but don't want (weapon strategy!) can still be dodged
+        // magnet: chips chase for a good while (fun to kite / reposition ones
+        // you don't want) but they're slightly slower than you and eventually
+        // give up — never a relentless chase
         d.magT = d.magT || 0;
-        if (p.alive && d.magT < 0.45 && dist2(d.x, d.y, p.x, p.y) < 110 * 110) {
+        if (p.alive && d.magT < 1.2 && dist2(d.x, d.y, p.x, p.y) < 120 * 120) {
           d.magT += dt;
           const a = Math.atan2(p.y - d.y, p.x - d.x);
           d.x += Math.cos(a) * 300 * dt;
