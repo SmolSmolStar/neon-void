@@ -1611,20 +1611,51 @@
       const T = g.time;
       const horizon = H * 0.74;
 
-      // --- synthwave sun (sits on the horizon, grid below) ---
-      const sunY = horizon - 28, sunR = 54;
-      ctx.save();
-      ctx.beginPath(); ctx.arc(W / 2, sunY, sunR, 0, TAU); ctx.clip();
-      const sg = ctx.createLinearGradient(0, sunY - sunR, 0, sunY + sunR);
-      sg.addColorStop(0, '#ffe98a'); sg.addColorStop(0.5, '#ff9b4d'); sg.addColorStop(1, '#ff4df0');
-      ctx.fillStyle = sg; ctx.fillRect(W / 2 - sunR, sunY - sunR, sunR * 2, sunR * 2);
-      ctx.fillStyle = '#06040f';
-      for (let i = 0; i < 7; i++) { const yy = sunY + 6 + i * 7; ctx.fillRect(W / 2 - sunR, yy, sunR * 2, Math.min(5, 2 + i)); }
-      ctx.restore();
-      this.glow(ctx, '#ff7b4d', 26);
-      ctx.strokeStyle = 'rgba(255,155,90,0.5)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(W / 2, sunY, sunR, 0, TAU); ctx.stroke();
+      // --- THE VOID: a black hole on the horizon (the game's namesake) ---
+      const vx = W / 2, vy = horizon - 26, vr = 46;
+      // ambient halo
+      const hgr = ctx.createRadialGradient(vx, vy, vr * 0.5, vx, vy, vr * 2.6);
+      hgr.addColorStop(0, 'rgba(77,243,255,0.14)');
+      hgr.addColorStop(0.5, 'rgba(255,77,240,0.09)');
+      hgr.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = hgr;
+      ctx.fillRect(vx - vr * 2.6, vy - vr * 2.6, vr * 5.2, vr * 5.2);
+      // accretion-disk debris orbiting on a tilted ellipse (back half first)
+      const sparks = [];
+      for (let i = 0; i < 7; i++) {
+        const oa = T * (0.5 + i * 0.13) + i * 2.4;
+        const orx = vr + 12 + (i % 3) * 9;
+        sparks.push({ x: vx + Math.cos(oa) * orx, y: vy + Math.sin(oa) * orx * 0.3, front: Math.sin(oa) > 0, c: i % 2 ? '#ff9df6' : '#9df6ff' });
+      }
+      const drawSpark = (s) => {
+        this.glow(ctx, s.c, 10);
+        ctx.fillStyle = s.c;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 1.8, 0, TAU); ctx.fill();
+        this.noGlow(ctx);
+      };
+      sparks.filter((s) => !s.front).forEach(drawSpark);
+      // swirling neon accretion ring (slowly rotating arc segments)
+      for (let i = 0; i < 6; i++) {
+        const a0 = T * (0.3 + (i % 3) * 0.08) * (i % 2 ? 1 : -1) + i * (TAU / 6);
+        const rr = vr + 5 + (i % 3) * 6;
+        ctx.save();
+        ctx.translate(vx, vy); ctx.rotate(a0);
+        this.glow(ctx, i % 2 ? '#ff4df0' : '#4df3ff', 14);
+        ctx.strokeStyle = i % 2 ? 'rgba(255,77,240,0.7)' : 'rgba(77,243,255,0.7)';
+        ctx.lineWidth = 2.4 - (i % 3) * 0.5;
+        ctx.beginPath(); ctx.arc(0, 0, rr, 0, 1.1 + (i % 3) * 0.4); ctx.stroke();
+        ctx.restore();
+      }
       this.noGlow(ctx);
+      // event horizon: pure black core with a thin luminous rim
+      ctx.fillStyle = '#000000';
+      ctx.beginPath(); ctx.arc(vx, vy, vr, 0, TAU); ctx.fill();
+      this.glow(ctx, '#4df3ff', 16);
+      ctx.strokeStyle = 'rgba(190,245,255,0.85)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(vx, vy, vr, 0, TAU); ctx.stroke();
+      this.noGlow(ctx);
+      sparks.filter((s) => s.front).forEach(drawSpark);
 
       // --- perspective grid ---
       ctx.strokeStyle = 'rgba(255,77,240,0.5)'; ctx.lineWidth = 1;
@@ -1701,13 +1732,13 @@
       ctx.fillStyle = 'rgba(185,215,250,0.75)'; ctx.font = '11px monospace';
       ctx.fillText('collect chips to level up · clear stages to raise the level cap', W / 2, 444);
 
-      // blinking prompt — one press starts the game (music comes with it)
+      // blinking prompt — below the void, resting on the grid
       ctx.fillStyle = 'rgba(3,1,9,0.6)';
-      ctx.fillRect(W / 2 - 160, 460, 320, 30); // backing band so the prompt reads over the sun
+      ctx.fillRect(W / 2 - 160, 610, 320, 30); // backing band so the prompt reads over the grid
       ctx.globalAlpha = 0.55 + 0.45 * Math.sin(T * 5);
       ctx.font = 'bold 20px monospace';
       this.glow(ctx, '#7dff4d', 16); ctx.fillStyle = '#c8ffb0';
-      ctx.fillText(g.isTouch ? 'TAP TO LAUNCH' : 'PRESS SPACE TO LAUNCH', W / 2, 481);
+      ctx.fillText(g.isTouch ? 'TAP TO LAUNCH' : 'PRESS SPACE TO LAUNCH', W / 2, 631);
       this.noGlow(ctx); ctx.globalAlpha = 1;
       ctx.restore();
     },
