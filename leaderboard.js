@@ -48,11 +48,37 @@
       })
       .catch(function () { hasWave = false; return false; });
   }
-  function fetchTop() {
+  // Start of the current week (Monday 00:00 UTC) — the board resets weekly by
+  // only showing scores newer than this (old scores are kept, just not shown).
+  function weekStartISO() {
+    var now = new Date();
+    var diff = (now.getUTCDay() + 6) % 7; // days since Monday
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff, 0, 0, 0)).toISOString();
+  }
+  function weekResetsInDays() {
+    var now = new Date();
+    var diff = (now.getUTCDay() + 6) % 7;
+    var nextMon = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff + 7, 0, 0, 0);
+    return Math.max(1, Math.ceil((nextMon - now.getTime()) / 86400000));
+  }
+  // Keep only each pilot's best row (rows arrive sorted by the board's key).
+  function dedupeByName(rows) {
+    var seen = {}, out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var k = (rows[i].name || '').toLowerCase();
+      if (seen[k]) continue; seen[k] = 1; out.push(rows[i]);
+    }
+    return out;
+  }
+  // mode: 'week' = top score this week; 'stage' = furthest stage this week.
+  function fetchBoard(mode) {
     if (!configured) return Promise.reject(new Error('not configured'));
     var sel = 'name,score,created_at' + (hasWave ? ',wave' : '');
-    var q = CFG.url + '/rest/v1/scores?game=eq.' + encodeURIComponent(CFG.game) + '&select=' + sel + '&order=score.desc&order=created_at.asc&limit=' + CFG.top;
-    return fetch(q, { headers: headers() }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+    var order = (mode === 'stage' && hasWave) ? '&order=wave.desc&order=score.desc' : '&order=score.desc&order=created_at.asc';
+    var q = CFG.url + '/rest/v1/scores?game=eq.' + encodeURIComponent(CFG.game)
+      + '&select=' + sel + '&created_at=gte.' + encodeURIComponent(weekStartISO()) + order + '&limit=100';
+    return fetch(q, { headers: headers() }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (rows) { return dedupeByName(rows); });
   }
   function submitScore(name, score, wave) {
     if (!configured) return Promise.reject(new Error('not configured'));
@@ -61,15 +87,16 @@
     return fetch(CFG.url + '/rest/v1/scores', { method: 'POST', headers: headers({ 'Prefer': 'return=minimal' }), body: JSON.stringify(row) })
       .then(function (r) { if (!r.ok) return r.text().then(function (t) { throw new Error('HTTP ' + r.status + ' ' + t); }); return true; });
   }
-  function getPlacement(score) {
+  // The player's weekly rank among distinct pilots (by their best score this week).
+  function getPlacement(name, score) {
     if (!configured) return Promise.resolve(null);
-    var base = CFG.url + '/rest/v1/scores?game=eq.' + encodeURIComponent(CFG.game);
-    var ch = headers({ 'Prefer': 'count=exact', 'Range-Unit': 'items', 'Range': '0-0' });
-    function total(r) { var cr = r.headers.get('content-range') || ''; return parseInt((cr.split('/')[1] || '0'), 10) || 0; }
-    return Promise.all([
-      fetch(base + '&score=gt.' + score + '&select=id', { headers: ch }).then(total),
-      fetch(base + '&select=id', { headers: ch }).then(total),
-    ]).then(function (a) { return { rank: a[0] + 1, total: Math.max(a[1], a[0] + 1) }; }).catch(function () { return null; });
+    var me = (name || '').toLowerCase();
+    return fetchBoard('week').then(function (board) {
+      var myBest = score, better = 0;
+      for (var i = 0; i < board.length; i++) { if ((board[i].name || '').toLowerCase() === me) { myBest = Math.max(myBest, board[i].score); break; } }
+      for (var j = 0; j < board.length; j++) { if ((board[j].name || '').toLowerCase() !== me && board[j].score > myBest) better++; }
+      return { rank: better + 1, total: Math.max(board.length, better + 1) };
+    }).catch(function () { return null; });
   }
 
   // --- Storage ------------------------------------------------------------
@@ -176,6 +203,10 @@
       '#nv-lb{width:320px;max-width:94vw;max-height:94vh;overflow:auto;}',
       '@keyframes nvpop{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}',
       '#nv-overlay.show #nv-lb{animation:nvpop .26s ease;}',
+      '#nv-lb .tabs{display:flex;gap:6px;margin-bottom:10px;}',
+      '#nv-lb .tab{flex:1;background:rgba(0,0,0,.35);border:1px solid rgba(77,243,255,.2);color:#8fb2cf;font-family:inherit;font-size:10px;letter-spacing:.1em;padding:6px 0;border-radius:6px;cursor:pointer;}',
+      '#nv-lb .tab.on{background:rgba(77,243,255,.16);border-color:#4df3ff;color:#eaffff;}',
+      '#nv-lb .weeknote{text-align:center;font-size:9px;letter-spacing:.1em;color:#6f8aa8;margin-top:8px;}',
       '#nv-lb .banner{background:linear-gradient(90deg,rgba(77,243,255,.18),rgba(255,90,240,.12));border:1px solid rgba(77,243,255,.4);',
       'border-radius:7px;padding:8px 9px;margin-bottom:10px;text-align:center;}',
       '#nv-lb .banner.hidden{display:none;}',
@@ -275,12 +306,27 @@
   var lbEl = {};
   var lastRows = [];
   var highlightKey = null;
+  var boardMode = 'week'; // 'week' = top score this week · 'stage' = furthest stage
+
+  function switchBoard(mode) {
+    boardMode = mode;
+    if (lbEl.tabWeek) { lbEl.tabWeek.classList.toggle('on', mode === 'week'); lbEl.tabStage.classList.toggle('on', mode === 'stage'); }
+    if (lbEl.sub) lbEl.sub.textContent = mode === 'stage' ? 'NEON VOID · FURTHEST STAGE' : 'NEON VOID · THIS WEEK';
+    refresh();
+  }
 
   function buildOverlay() {
     var overlay = h('div'); overlay.id = 'nv-overlay';
     var card = h('aside'); card.id = 'nv-lb';
     card.appendChild(h('h2', null, 'TOP PILOTS'));
-    card.appendChild(h('div', 'sub', 'NEON VOID · GLOBAL'));
+    lbEl.sub = h('div', 'sub', 'NEON VOID · THIS WEEK'); card.appendChild(lbEl.sub);
+    var tabs = h('div', 'tabs');
+    lbEl.tabWeek = h('button', 'tab on', 'THIS WEEK');
+    lbEl.tabStage = h('button', 'tab', 'BY STAGE');
+    lbEl.tabWeek.addEventListener('click', function () { switchBoard('week'); });
+    lbEl.tabStage.addEventListener('click', function () { switchBoard('stage'); });
+    tabs.appendChild(lbEl.tabWeek); tabs.appendChild(lbEl.tabStage);
+    card.appendChild(tabs);
     lbEl.banner = h('div', 'banner hidden'); card.appendChild(lbEl.banner);
     var head = h('div', 'hrow');
     ['#', 'PILOT', 'SCORE', 'STG', 'DATE'].forEach(function (t, i) { head.appendChild(h('span', ['c-rk', 'c-nm', 'c-sc', 'c-wv', 'c-dt'][i], t)); });
@@ -296,6 +342,7 @@
     lbEl.status = h('div', 'status'); foot.appendChild(lbEl.status);
     lbEl.again = h('button', 'again', '▶ PLAY AGAIN'); foot.appendChild(lbEl.again);
     foot.appendChild(h('div', 'hint', 'or press SPACE'));
+    lbEl.weeknote = h('div', 'weeknote'); foot.appendChild(lbEl.weeknote);
     card.appendChild(foot);
 
     ['keydown', 'keyup', 'keypress'].forEach(function (t) { lbEl.input.addEventListener(t, function (e) { e.stopPropagation(); }); });
@@ -325,10 +372,17 @@
   }
 
   function render(rows) {
-    lastRows = rows || []; lbEl.list.innerHTML = '';
+    lastRows = rows || [];
+    var display = lastRows.slice(0, CFG.top);
+    lbEl.list.innerHTML = '';
     var me = getName().toLowerCase();
-    if (!lastRows.length) { lbEl.list.appendChild(h('div', 'empty', configured ? 'no scores yet — be the first!' : 'leaderboard offline')); return; }
-    lastRows.forEach(function (r, i) {
+    if (lbEl.weeknote) {
+      lbEl.weeknote.textContent = (boardMode === 'stage' && !hasWave)
+        ? 'stage tracking off — run the DB migration'
+        : 'weekly board · resets in ' + weekResetsInDays() + ' day' + (weekResetsInDays() === 1 ? '' : 's');
+    }
+    if (!display.length) { lbEl.list.appendChild(h('div', 'empty', configured ? 'no runs this week — be the first!' : 'leaderboard offline')); return; }
+    display.forEach(function (r, i) {
       var li = h('li', 'row' + (i < 3 ? ' top' : ''));
       var key = (r.name || '') + '|' + r.score;
       if (me && (r.name || '').toLowerCase() === me) li.classList.add('me');
@@ -345,7 +399,7 @@
 
   function refresh() {
     render(readCache());
-    return fetchTop().then(function (rows) { writeCache(rows); render(rows); return rows; })
+    return fetchBoard(boardMode).then(function (rows) { writeCache(rows); render(rows); return rows; })
       .catch(function () { setStatus(configured ? 'offline — showing cached' : 'leaderboard not configured', 'err'); render(readCache()); });
   }
 
@@ -356,7 +410,10 @@
     setName(name); lbEl.save.disabled = true; setStatus(opts.auto ? 'saving your run…' : 'saving…', '');
     return submitScore(name, score, wave).then(function () {
       highlightKey = name + '|' + score; setStatus('saved · ' + score.toLocaleString() + ' pts', 'ok');
-      return Promise.all([refresh(), getPlacement(score)]);
+      // Show this week's score board with the player's placement.
+      boardMode = 'week';
+      if (lbEl.tabWeek) { lbEl.tabWeek.classList.add('on'); lbEl.tabStage.classList.remove('on'); lbEl.sub.textContent = 'NEON VOID · THIS WEEK'; }
+      return Promise.all([refresh(), getPlacement(name, score)]);
     }).then(function (res) { if (res && res[1]) showBanner(res[1].rank, res[1].total, score, wave); })
       .catch(function (err) { setStatus('save failed — ' + (err && err.message ? err.message.slice(0, 40) : 'try again'), 'err'); })
       .then(function () { lbEl.save.disabled = false; });
@@ -418,10 +475,11 @@
     probeWave().then(refresh);
     requestAnimationFrame(tick);
     window.__lb = {
-      refresh: refresh, submit: doSubmit, fetchTop: fetchTop, getPlacement: getPlacement,
-      discover: discover, renderCodex: renderCodex,
+      refresh: refresh, submit: doSubmit, fetchBoard: fetchBoard, getPlacement: getPlacement,
+      switchBoard: switchBoard, discover: discover, renderCodex: renderCodex,
       showOverlay: showOverlay, hideOverlay: hideOverlay,
-      get rows() { return lastRows; }, get discovered() { return Array.from(discovered); },
+      get rows() { return lastRows; }, get boardMode() { return boardMode; },
+      get discovered() { return Array.from(discovered); },
       get overlayShown() { return lbEl.overlay.classList.contains('show'); },
       get hasWave() { return hasWave; }, configured: configured,
     };
