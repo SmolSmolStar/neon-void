@@ -21,7 +21,7 @@
     blaster: { name: 'BLASTER', color: '#4df3ff', maxLv: 6 },
     spread:  { name: 'SPREAD',  color: '#ffd94d', maxLv: 6 },
     laser:   { name: 'LASER',   color: '#ff4df0', maxLv: 6 },
-    missile: { name: 'MISSILE', color: '#ffb84d', maxLv: 6 },
+    missile: { name: 'MISSILE', color: '#c07bff', maxLv: 6 },
   };
   const WEAPON_KEYS = Object.keys(WEAPONS);
 
@@ -98,7 +98,6 @@
       this.victoryT = 0;
       this._chip1 = null;      // last two weapon-chip types (anti-streak guard)
       this._chip2 = null;
-      this._capHinted = false; // one big cap explainer per cap tier
       this.shake = 0;
       this.hitstop = 0;
       this.flash = 0;
@@ -721,7 +720,6 @@
           // celebrate the unlock so the cap system teaches itself
           this.floaters.push({ x: W / 2, y: H * 0.58, text: 'WEAPON CAP RAISED — LV' + capAfter + ' UNLOCKED!', t: 2.2, color: '#7dff4d' });
           this.sfx.play('levelup', capAfter);
-          this._capHinted = false; // fresh hint for the next tier
         }
         this.wave = 1;
         this.flash = 1;
@@ -833,11 +831,10 @@
           } else {
             this.score += 250;
             label = 'LV CAP +250';
+            // quiet hint only — a big banner here would stomp the STAGE announce
+            // (boss drop-showers are collected right at stage transitions)
             const nxt = this.nextCapInfo();
-            if (nxt) {
-              this.floaters.push({ x: p.x, y: p.y - 44, text: 'LV' + nxt.level + ' UNLOCKS AT STAGE ' + nxt.stage, t: 1.4, color: '#8fb2cf' });
-              if (!this._capHinted) { this._capHinted = true; this.announce('REACH STAGE ' + nxt.stage + ' TO UNLOCK LV' + nxt.level); }
-            }
+            if (nxt) this.floaters.push({ x: p.x, y: p.y - 44, text: 'LV' + nxt.level + ' UNLOCKS AT STAGE ' + nxt.stage, t: 1.4, color: '#8fb2cf' });
             this.sfx.play('powerup');
           }
         } else {
