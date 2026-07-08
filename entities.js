@@ -132,6 +132,12 @@ class Player {
         ctx.translate(this.x, this.y);
         ctx.rotate(this.angle);
 
+        // Engine glow
+        ctx.fillStyle = 'rgba(0, 255, 136, 0.2)';
+        ctx.beginPath();
+        ctx.arc(0, 0, 30, 0, Math.PI * 2);
+        ctx.fill();
+
         // Ship body
         ctx.fillStyle = '#00ff88';
         ctx.beginPath();
@@ -142,15 +148,25 @@ class Player {
         ctx.closePath();
         ctx.fill();
 
-        // Glow
-        ctx.strokeStyle = 'rgba(0, 255, 136, 0.6)';
+        // Bright glow
+        ctx.strokeStyle = 'rgba(0, 255, 136, 0.8)';
         ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Engine trails
+        ctx.strokeStyle = 'rgba(0, 150, 100, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-10, -8);
+        ctx.lineTo(-18, -10);
+        ctx.moveTo(-10, 8);
+        ctx.lineTo(-18, 10);
         ctx.stroke();
 
         // Shield indicator
         if (this.invulnerable > 0) {
             ctx.strokeStyle = 'rgba(0, 255, 136, 0.8)';
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.arc(0, 0, 25, 0, Math.PI * 2);
             ctx.stroke();
@@ -182,12 +198,23 @@ class Bullet {
     }
 
     draw(ctx) {
-        ctx.fillStyle = this.type === 'laser' ? '#00ff88' : '#ff00ff';
+        const color = this.type === 'laser' ? '#00ff88' : '#ff00ff';
+        const glowColor = this.type === 'laser' ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 0, 255, 0.3)';
+
+        // Outer glow
+        ctx.fillStyle = glowColor;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size * 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Main bullet
+        ctx.fillStyle = color;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.strokeStyle = this.type === 'laser' ? 'rgba(0, 255, 136, 0.6)' : 'rgba(255, 0, 255, 0.6)';
+        // Bright edge
+        ctx.strokeStyle = color;
         ctx.lineWidth = 1;
         ctx.stroke();
     }
@@ -216,15 +243,31 @@ class Missile extends Bullet {
     }
 
     draw(ctx) {
-        // Trail
-        ctx.strokeStyle = 'rgba(255, 100, 0, 0.5)';
-        ctx.lineWidth = 2;
+        // Glow trail
+        ctx.strokeStyle = 'rgba(255, 100, 0, 0.3)';
+        ctx.lineWidth = 6;
         ctx.beginPath();
         for (let i = 0; i < this.trail.length; i++) {
             if (i === 0) ctx.moveTo(this.trail[i].x, this.trail[i].y);
             else ctx.lineTo(this.trail[i].x, this.trail[i].y);
         }
         ctx.stroke();
+
+        // Main trail
+        ctx.strokeStyle = 'rgba(255, 150, 0, 0.7)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (let i = 0; i < this.trail.length; i++) {
+            if (i === 0) ctx.moveTo(this.trail[i].x, this.trail[i].y);
+            else ctx.lineTo(this.trail[i].x, this.trail[i].y);
+        }
+        ctx.stroke();
+
+        // Outer glow
+        ctx.fillStyle = 'rgba(255, 100, 0, 0.2)';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size * 1.8, 0, Math.PI * 2);
+        ctx.fill();
 
         // Head
         ctx.fillStyle = '#ff6600';
@@ -233,7 +276,7 @@ class Missile extends Bullet {
         ctx.fill();
 
         ctx.strokeStyle = '#ffaa00';
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 2;
         ctx.stroke();
     }
 }
@@ -331,17 +374,31 @@ class Enemy {
 
         // Body color based on type
         let baseColor = '#ff00ff';
-        let glowColor = 'rgba(255, 0, 255, 0.5)';
+        let glowColor = 'rgba(255, 0, 255, 0.3)';
+        let outerGlow = 'rgba(255, 0, 255, 0.15)';
         if (this.type === 'weak') {
             baseColor = '#ff6b00';
-            glowColor = 'rgba(255, 107, 0, 0.5)';
+            glowColor = 'rgba(255, 107, 0, 0.3)';
+            outerGlow = 'rgba(255, 107, 0, 0.15)';
         } else if (this.type === 'armored') {
             baseColor = '#ff0000';
-            glowColor = 'rgba(255, 0, 0, 0.5)';
+            glowColor = 'rgba(255, 0, 0, 0.3)';
+            outerGlow = 'rgba(255, 0, 0, 0.15)';
         } else if (this.type === 'fast') {
             baseColor = '#ffff00';
-            glowColor = 'rgba(255, 255, 0, 0.5)';
+            glowColor = 'rgba(255, 255, 0, 0.3)';
+            outerGlow = 'rgba(255, 255, 0, 0.15)';
         }
+
+        // Outer aura
+        ctx.fillStyle = outerGlow;
+        ctx.beginPath();
+        ctx.moveTo(0, -18);
+        ctx.lineTo(-18, 18);
+        ctx.lineTo(0, 14);
+        ctx.lineTo(18, 18);
+        ctx.closePath();
+        ctx.fill();
 
         // Body
         ctx.fillStyle = baseColor;
@@ -453,6 +510,21 @@ class Pickup {
         else if (this.type === 'weapon3') color = '#ff6600';
         else if (this.type === 'health') color = '#ff0000';
 
+        // Outer glow
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.3;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.size * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Middle glow
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.size * 1.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Star
+        ctx.globalAlpha = 1;
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.moveTo(this.size, 0);

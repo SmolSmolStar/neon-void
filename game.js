@@ -24,6 +24,10 @@ class Game {
         this.mouseX = this.canvas.width / 2;
         this.mouseY = this.canvas.height / 2;
 
+        this.screenShake = 0;
+        this.killCombo = 0;
+        this.lastKillTime = 0;
+
         this.setupEventListeners();
         this.draw();
     }
@@ -121,13 +125,17 @@ class Game {
         this.spawnTimer--;
         if (this.spawnTimer <= 0) {
             const difficultyMultiplier = 1 + (this.wave - 1) * 0.15;
-            this.spawnRate = Math.max(40, 120 - this.wave * 5);
+            this.spawnRate = Math.max(30, 120 - this.wave * 8);
             this.spawnTimer = this.spawnRate;
 
-            const types = ['basic', 'weak', 'fast'];
+            let types = ['basic', 'weak'];
+            if (this.wave >= 2) types.push('fast');
             if (this.wave >= 3) types.push('armored');
-            const type = types[Math.floor(Math.random() * types.length)];
+            if (this.wave >= 5) {
+                types = ['armored', 'fast', 'basic'];
+            }
 
+            const type = types[Math.floor(Math.random() * types.length)];
             const x = Math.random() * (this.canvas.width - 60) + 30;
             this.enemies.push(new Enemy(x, -25, type));
         }
@@ -179,9 +187,19 @@ class Game {
                     }
 
                     if (enemy.isDead()) {
-                        this.score += enemy.value;
+                        const timeSinceLastKill = performance.now() - this.lastKillTime;
+                        if (timeSinceLastKill < 2000) {
+                            this.killCombo++;
+                        } else {
+                            this.killCombo = 1;
+                        }
+                        this.lastKillTime = performance.now();
+
+                        const comboMultiplier = 1 + (this.killCombo - 1) * 0.1;
+                        this.score += Math.floor(enemy.value * comboMultiplier);
                         this.waveEnemiesKilled++;
-                        this.particleSystem.explosion(enemy.x, enemy.y, '#ff6b00', 20);
+                        this.screenShake = Math.min(10, this.killCombo);
+                        this.particleSystem.explosion(enemy.x, enemy.y, '#ff6b00', 20 + this.killCombo * 2);
                         this.playSound('explosion');
 
                         // Weapon drops
@@ -221,9 +239,19 @@ class Game {
                         enemy.takeDamage(bullet.damage * dmgFalloff);
 
                         if (enemy.isDead()) {
-                            this.score += enemy.value;
+                            const timeSinceLastKill = performance.now() - this.lastKillTime;
+                            if (timeSinceLastKill < 2000) {
+                                this.killCombo++;
+                            } else {
+                                this.killCombo = 1;
+                            }
+                            this.lastKillTime = performance.now();
+
+                            const comboMultiplier = 1 + (this.killCombo - 1) * 0.1;
+                            this.score += Math.floor(enemy.value * comboMultiplier);
                             this.waveEnemiesKilled++;
-                            this.particleSystem.explosion(enemy.x, enemy.y, '#ff6b00', 20);
+                            this.screenShake = Math.min(12, this.killCombo);
+                            this.particleSystem.explosion(enemy.x, enemy.y, '#ff6b00', 20 + this.killCombo * 2);
                             this.playSound('explosion');
 
                             if (Math.random() < enemy.dropChance) {
@@ -316,7 +344,8 @@ class Game {
     updateHUD() {
         document.getElementById('score').textContent = `Score: ${this.score}`;
         document.getElementById('health').textContent = `HP: ${Math.max(0, this.player.health)}`;
-        document.getElementById('wave').textContent = `Wave: ${this.wave}`;
+        const waveText = this.killCombo > 1 ? `Wave: ${this.wave} [${this.killCombo}x]` : `Wave: ${this.wave}`;
+        document.getElementById('wave').textContent = waveText;
     }
 
     endGame() {
@@ -384,15 +413,28 @@ class Game {
     }
 
     draw() {
+        // Screen shake effect
+        let shakeX = 0;
+        let shakeY = 0;
+        if (this.screenShake > 0) {
+            shakeX = (Math.random() - 0.5) * this.screenShake;
+            shakeY = (Math.random() - 0.5) * this.screenShake;
+            this.screenShake *= 0.9;
+        }
+
+        this.ctx.save();
+        this.ctx.translate(shakeX, shakeY);
+
         // Background
         this.ctx.fillStyle = '#0a0e27';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Starfield
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        // Animated starfield
         for (let i = 0; i < 100; i++) {
             const x = (i * 73) % this.canvas.width;
-            const y = (i * 97 + this.wave * 10) % this.canvas.height;
+            const y = (i * 97 + this.wave * 20) % this.canvas.height;
+            const brightness = 0.2 + Math.sin(i + this.wave * 0.1) * 0.2;
+            this.ctx.fillStyle = `rgba(255, 255, 255, ${brightness})`;
             this.ctx.fillRect(x, y, 1, 1);
         }
 
@@ -437,6 +479,8 @@ class Game {
             this.ctx.arc(this.mouseX, this.mouseY, 25, 0, Math.PI * 2);
             this.ctx.stroke();
         }
+
+        this.ctx.restore();
 
         requestAnimationFrame(() => {
             this.update();
