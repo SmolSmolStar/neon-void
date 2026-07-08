@@ -123,8 +123,8 @@
     { id: 'p:laser', c: '#ff4df0', lb: 'L', nm: 'LASER', nt: 'piercing beam' },
     { id: 'p:missile', c: '#ffb84d', lb: 'M', nm: 'MISSILE', nt: 'homing missiles' },
     { id: 'p:heal', c: '#7dff4d', lb: '+', nm: 'REPAIR', nt: 'restore hull' },
-    { id: 'p:shield', c: '#4dc3ff', lb: 'S', nm: 'SHIELD', nt: 'absorb one hit' },
-    { id: 'p:bomb', c: '#ffb84d', lb: 'B', nm: 'BOMB', nt: 'screen-clearing nova · press X' },
+    { id: 'p:shield', c: '#4dc3ff', lb: '◈', nm: 'SHIELD', nt: 'absorb one hit' },
+    { id: 'p:bomb', c: '#ffb84d', lb: '✸', nm: 'BOMB', nt: 'screen-clearing nova · press X' },
   ];
   var BY_ID = {}; ENEMIES.concat(PICKUPS).forEach(function (e) { BY_ID[e.id] = e; });
   function dropKindToId(kind) {

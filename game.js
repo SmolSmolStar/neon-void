@@ -1278,8 +1278,8 @@
           color = WEAPONS[w].color;
           label = WEAPONS[w].name[0];
         } else if (d.kind === 'heal') { color = '#7dff4d'; label = '+'; }
-        else if (d.kind === 'shield') { color = '#4dc3ff'; label = 'S'; }
-        else if (d.kind === 'bomb') { color = '#ffb84d'; label = 'B'; }
+        else if (d.kind === 'shield') { color = '#4dc3ff'; label = '◈'; }
+        else if (d.kind === 'bomb') { color = '#ffb84d'; label = '✸'; }
 
         this.glow(ctx, color, 16);
         ctx.rotate(Math.PI / 4);
