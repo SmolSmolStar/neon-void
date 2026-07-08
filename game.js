@@ -791,11 +791,14 @@
         const d = this.drops[i];
         d.t += dt;
         // magnet: a gentle chase — chips trail behind (260 vs your 320), so
-        // there's real time to kite/reposition the ones you don't want before
-        // they give up. Never relentless.
+        // there's real time to kite/reposition the ones you don't want. When
+        // the player is actively PULLING AWAY the chase budget drains 4x
+        // faster, so a deliberate retreat dumps an unwanted chip in ~0.45s
+        // even in late-stage bullet storms. Never relentless.
         d.magT = d.magT || 0;
-        if (p.alive && d.magT < 1.8 && dist2(d.x, d.y, p.x, p.y) < 120 * 120) {
-          d.magT += dt;
+        const dNow = dist2(d.x, d.y, p.x, p.y);
+        if (p.alive && d.magT < 1.8 && dNow < 120 * 120) {
+          d.magT += (d.pd != null && dNow > d.pd) ? dt * 4 : dt;
           const a = Math.atan2(p.y - d.y, p.x - d.x);
           d.x += Math.cos(a) * 260 * dt;
           d.y += Math.sin(a) * 260 * dt;
@@ -803,6 +806,9 @@
           d.y += d.vy * dt;
           d.x += Math.sin(d.t * 3) * 20 * dt;
         }
+        // post-move distance: next frame's comparison then isolates PLAYER
+        // motion (updatePlayer runs before updateDrops) = true retreat intent
+        d.pd = dist2(d.x, d.y, p.x, p.y);
         if (d.y > H + 30) { this.drops.splice(i, 1); continue; }
         if (p.alive && dist2(d.x, d.y, p.x, p.y) < (d.r + p.r + 4) * (d.r + p.r + 4)) {
           this.collectDrop(d);
