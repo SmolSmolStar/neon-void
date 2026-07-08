@@ -168,13 +168,22 @@
     updatePlayer(dt, input) {
       const p = this.player;
       if (!p.alive) return;
-      const sp = 320;
-      let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-      let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
-      if (dx && dy) { dx *= 0.7071; dy *= 0.7071; }
-      p.x = clamp(p.x + dx * sp * dt, p.r + 4, W - p.r - 4);
-      p.y = clamp(p.y + dy * sp * dt, H * 0.35, H - p.r - 6);
-      p.tilt = lerp(p.tilt, dx * 0.35, 1 - Math.pow(0.001, dt));
+      if (input.dragActive) {
+        // touch / mouse drag: the ship follows the finger 1:1 (relative drag)
+        const nx = clamp(input.tx, p.r + 4, W - p.r - 4);
+        const ny = clamp(input.ty, H * 0.35, H - p.r - 6);
+        input.tx = nx; input.ty = ny;
+        p.tilt = lerp(p.tilt, clamp((nx - p.x) * 0.05, -0.4, 0.4), 1 - Math.pow(0.001, dt));
+        p.x = nx; p.y = ny;
+      } else {
+        const sp = 320;
+        let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+        let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+        if (dx && dy) { dx *= 0.7071; dy *= 0.7071; }
+        p.x = clamp(p.x + dx * sp * dt, p.r + 4, W - p.r - 4);
+        p.y = clamp(p.y + dy * sp * dt, H * 0.35, H - p.r - 6);
+        p.tilt = lerp(p.tilt, dx * 0.35, 1 - Math.pow(0.001, dt));
+      }
       p.inv = Math.max(0, p.inv - dt);
       p.engine += dt;
 
@@ -1380,16 +1389,16 @@
         ctx.fillText('★ SECTOR CLEARED — MASTER PILOT ★', W / 2, ty + 136); this.noGlow(ctx);
       }
 
-      // controls (kept above the sun so nothing overlaps)
+      // controls (kept above the sun so nothing overlaps) — adapt to input type
       ctx.fillStyle = 'rgba(175,205,240,0.6)'; ctx.font = '11px monospace';
-      ctx.fillText('MOVE  WASD / ARROWS      FIRE  SPACE      BOMB  X', W / 2, 350);
+      ctx.fillText(g.isTouch ? 'DRAG to fly & fire      ✸ button to bomb' : 'MOVE  WASD / ARROWS      FIRE  SPACE      BOMB  X', W / 2, 350);
       ctx.fillText('collect chips to level up · beat a boss to advance', W / 2, 368);
 
-      // blinking prompt — first press powers on (music), second launches
+      // blinking prompt — first press/tap powers on (music), second launches
       ctx.globalAlpha = 0.5 + 0.5 * Math.sin(T * 5);
       ctx.font = 'bold 20px monospace';
-      if (g.audioReady) { this.glow(ctx, '#7dff4d', 16); ctx.fillStyle = '#c8ffb0'; ctx.fillText('PRESS SPACE TO LAUNCH', W / 2, 410); }
-      else { this.glow(ctx, '#ffd25a', 16); ctx.fillStyle = '#ffe98a'; ctx.fillText('◈ INSERT COIN ◈', W / 2, 410); }
+      if (g.audioReady) { this.glow(ctx, '#7dff4d', 16); ctx.fillStyle = '#c8ffb0'; ctx.fillText(g.isTouch ? 'TAP TO LAUNCH' : 'PRESS SPACE TO LAUNCH', W / 2, 410); }
+      else { this.glow(ctx, '#ffd25a', 16); ctx.fillStyle = '#ffe98a'; ctx.fillText(g.isTouch ? '◈ TAP TO START ◈' : '◈ INSERT COIN ◈', W / 2, 410); }
       this.noGlow(ctx); ctx.globalAlpha = 1;
       ctx.restore();
     },
@@ -1577,9 +1586,11 @@
       onWin() { try { localStorage.setItem('neonvoid_cleared', '1'); } catch (e) {} },
     });
 
-    const input = { left: false, right: false, up: false, down: false, fire: false, bomb: false };
+    const input = { left: false, right: false, up: false, down: false, fire: false, bomb: false, dragActive: false, tx: W / 2, ty: H - 90 };
     let paused = false, musicState = null, audioUnlocked = false, musicVol = 0.5;
+    const isTouch = (typeof matchMedia !== 'undefined' && matchMedia('(hover: none) and (pointer: coarse)').matches) || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     game.audioReady = false;
+    game.isTouch = isTouch;
     // Browsers block autoplay: the first gesture "powers on" audio + menu music.
     const unlock = () => { if (audioUnlocked) return; audioUnlocked = true; game.audioReady = true; sfx.ensure(); };
 
@@ -1619,12 +1630,50 @@
       if (k) { input[k] = false; ev.preventDefault(); }
     });
     window.addEventListener('blur', () => { for (const k in input) input[k] = false; });
-    // A click also powers on audio + menu music (without launching).
-    canvas.addEventListener('pointerdown', unlock);
+    // ---- pointer / touch controls: drag-to-fly + auto-fire (also mouse-drag) ----
+    const canvasPos = (e) => {
+      const r = canvas.getBoundingClientRect();
+      return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+    };
+    let dragId = null, prevX = 0, prevY = 0;
+    canvas.addEventListener('pointerdown', (e) => {
+      const firstGesture = !audioUnlocked;
+      unlock();
+      if (game.state === 'over') return;        // results overlay handles retry
+      if (!firstGesture) input.fire = true;     // hold to fire; on the menu's 2nd tap this launches
+      if (game.state === 'play') {
+        const pos = canvasPos(e);
+        prevX = pos.x; prevY = pos.y;
+        input.tx = game.player.x; input.ty = game.player.y;
+        input.dragActive = true; dragId = e.pointerId;
+        if (canvas.setPointerCapture) { try { canvas.setPointerCapture(e.pointerId); } catch (err) {} }
+      }
+      e.preventDefault();
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!input.dragActive || e.pointerId !== dragId) return;
+      const pos = canvasPos(e);
+      input.tx += pos.x - prevX; input.ty += pos.y - prevY;
+      prevX = pos.x; prevY = pos.y;
+      e.preventDefault();
+    });
+    const endPtr = (e) => { input.fire = false; if (e.pointerId === dragId) { input.dragActive = false; dragId = null; } };
+    canvas.addEventListener('pointerup', endPtr);
+    canvas.addEventListener('pointercancel', endPtr);
+
+    // On-screen bomb button (shown on touch devices via CSS).
+    const bombBtn = document.getElementById('nv-bomb-btn');
+    if (bombBtn) {
+      bombBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); unlock(); input.bomb = true; });
+      const bombUp = (e) => { e.stopPropagation(); input.bomb = false; };
+      bombBtn.addEventListener('pointerup', bombUp);
+      bombBtn.addEventListener('pointercancel', bombUp);
+    }
 
     // scale canvas to fit window while keeping aspect
     function fit() {
-      const scale = Math.min(window.innerWidth / W, window.innerHeight / H);
+      const pad = 14;
+      const scale = Math.min((window.innerWidth - pad) / W, (window.innerHeight - pad) / H);
       canvas.style.width = Math.floor(W * scale) + 'px';
       canvas.style.height = Math.floor(H * scale) + 'px';
     }

@@ -143,6 +143,8 @@
     var css = [
       '#nv-wrap{display:flex;gap:22px;align-items:center;justify-content:center;flex-wrap:wrap;}',
       '@media(max-width:900px){#nv-wrap{flex-direction:column-reverse;gap:14px;}}',
+      // On touch/phones the codex side-panel is hidden so the game gets the full screen.
+      '@media (hover: none) and (pointer: coarse){#nv-codex{display:none;}}',
       // shared panel chrome
       '#nv-codex,#nv-lb{font-family:' + mono + ';color:#cfe9ff;background:linear-gradient(180deg,rgba(12,8,28,.94),rgba(6,4,16,.94));',
       'border:1px solid rgba(77,243,255,.25);border-radius:12px;padding:14px;box-shadow:0 0 42px rgba(77,243,255,.09),inset 0 0 30px rgba(255,90,240,.05);',
