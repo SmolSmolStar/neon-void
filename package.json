@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.js",
-    "smoke": "node test/smoke.mjs"
+    "smoke": "node test/smoke.mjs",
+    "serve": "node test/server.mjs 8080"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer-core": "^25.3.0"
+  }
 }
