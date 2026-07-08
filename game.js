@@ -1943,7 +1943,25 @@
         case 'collect': this.tone(988, 0.05, 'triangle', 0.07); this.tone(1319, 0.07, 'triangle', 0.06, 1, 0.04); this.tone(1760, 0.11, 'triangle', 0.05, 1, 0.09); break;
         case 'victory': [523, 659, 784, 1046, 1319].forEach((f, i) => this.tone(f, 0.5, 'square', 0.07, 1, i * 0.12)); this.tone(1568, 0.9, 'triangle', 0.06, 1, 0.62); break;
         case 'fanfare': [784, 1047, 1319, 1568].forEach((f, i) => this.tone(f, 0.13, 'square', 0.06, 1, i * 0.07)); this.tone(1568, 0.5, 'triangle', 0.06, 1, 0.28); this.tone(2093, 0.5, 'triangle', 0.045, 1, 0.28); break;
-        case 'launch': this.noise(0.95, 0.22); this.tone(80, 0.95, 'sawtooth', 0.12, 3.6); this.tone(52, 0.8, 'sine', 0.16, 2.2); this.tone(320, 0.5, 'triangle', 0.05, 2.6, 0.25); break;
+        case 'launch':
+          // ignition thump
+          this.tone(150, 0.28, 'sine', 0.26, 0.22);
+          this.noise(0.3, 0.26);
+          // sustained engine roar (staggered layers so it doesn't just puff out)
+          this.noise(1.3, 0.24, 0.05);
+          this.noise(1.1, 0.18, 0.5);
+          this.noise(0.9, 0.12, 0.95);
+          // deep sub swell underneath
+          this.tone(36, 1.6, 'sine', 0.24, 2.6);
+          this.tone(55, 1.3, 'triangle', 0.15, 3.0, 0.1);
+          // rising scream of the engines
+          this.tone(65, 1.25, 'sawtooth', 0.12, 6.0, 0.05);
+          this.tone(110, 0.95, 'sawtooth', 0.07, 4.5, 0.35);
+          // crackle pops as it tears away
+          this.noise(0.07, 0.13, 0.3);
+          this.noise(0.05, 0.11, 0.62);
+          this.noise(0.07, 0.11, 0.9);
+          break;
       }
     }
 
