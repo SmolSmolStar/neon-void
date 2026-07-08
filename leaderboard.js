@@ -361,47 +361,60 @@
   function hideOverlay() { lbEl.overlay.classList.remove('show'); }
 
   // Neon confetti burst — fired when a run claims #1 on the weekly board.
+  // Perf notes: glow is pre-rendered into small sprites once (per-frame
+  // shadowBlur is very slow), and the canvas lives on <body>, NOT inside the
+  // backdrop-blurred overlay (animating inside it forces costly recompositing).
   function neonConfetti() {
     if (!lbEl.overlay) return;
-    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var dpr = Math.min(1.5, window.devicePixelRatio || 1);
     var VW = window.innerWidth, VH = window.innerHeight;
     var cv = document.createElement('canvas');
+    cv.id = 'nv-confetti';
     cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:80;';
     cv.width = VW * dpr; cv.height = VH * dpr;
-    lbEl.overlay.appendChild(cv);
+    document.body.appendChild(cv);
     var ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
     var colors = ['#4df3ff', '#ff4df0', '#ffd25a', '#5affc8', '#ffffff'];
+    var sprites = colors.map(function (col) {
+      var s = document.createElement('canvas'); s.width = 48; s.height = 64;
+      var sc = s.getContext('2d');
+      sc.translate(24, 32);
+      sc.shadowColor = col; sc.shadowBlur = 14;
+      sc.fillStyle = col;
+      sc.fillRect(-5, -11, 10, 22);
+      return s;
+    });
     var cx = VW / 2, cy = VH * 0.42, parts = [];
-    for (var i = 0; i < 150; i++) {
-      var burst = i < 80, a = Math.random() * Math.PI * 2, sp = 140 + Math.random() * 340;
+    for (var i = 0; i < 130; i++) {
+      var burst = i < 70, a = Math.random() * Math.PI * 2, sp = 220 + Math.random() * 480;
       parts.push({
         x: burst ? cx : Math.random() * VW,
-        y: burst ? cy : -20 - Math.random() * VH * 0.3,
-        vx: burst ? Math.cos(a) * sp : (Math.random() - 0.5) * 70,
-        vy: burst ? Math.sin(a) * sp - 140 : 40 + Math.random() * 130,
-        w: 3 + Math.random() * 4, hh: 8 + Math.random() * 13,
-        rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 13,
-        col: colors[(Math.random() * colors.length) | 0], life: 1,
+        y: burst ? cy : -30 - Math.random() * VH * 0.25,
+        vx: burst ? Math.cos(a) * sp : (Math.random() - 0.5) * 90,
+        vy: burst ? Math.sin(a) * sp - 200 : 180 + Math.random() * 260,
+        scl: 0.45 + Math.random() * 0.6,
+        rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 16,
+        img: sprites[(Math.random() * sprites.length) | 0], life: 1,
       });
     }
     var last = performance.now(), elapsed = 0;
+    ctx.globalCompositeOperation = 'lighter';
     (function frame(now) {
       var dt = Math.min(0.05, (now - last) / 1000); last = now; elapsed += dt;
       ctx.clearRect(0, 0, VW, VH);
-      ctx.globalCompositeOperation = 'lighter';
       for (var j = 0; j < parts.length; j++) {
         var p = parts[j];
-        p.vy += 280 * dt; p.vx *= Math.pow(0.9, dt * 60);
+        p.vy += 750 * dt; p.vx *= Math.pow(0.92, dt * 60);
         p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
-        if (elapsed > 2.2) p.life -= dt * 0.9;
-        if (p.life <= 0) continue;
-        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        if (elapsed > 1.3) p.life -= dt * 1.4;
+        if (p.life <= 0 || p.y > VH + 40) continue;
+        ctx.save();
+        ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale(p.scl, p.scl);
         ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
-        ctx.shadowColor = p.col; ctx.shadowBlur = 10; ctx.fillStyle = p.col;
-        ctx.fillRect(-p.w / 2, -p.hh / 2, p.w, p.hh);
+        ctx.drawImage(p.img, -24, -32);
         ctx.restore();
       }
-      if (elapsed < 3.8) requestAnimationFrame(frame);
+      if (elapsed < 2.4) requestAnimationFrame(frame);
       else if (cv.parentNode) cv.parentNode.removeChild(cv);
     })(last);
   }
