@@ -49,7 +49,7 @@
     { name: 'DREADNOUGHT MK-VII',  color: '#4df3ff', bullet: '#8af6ff', hpMul: 1.30, r: 56, move: 'pace',     moveSpd: 120, phases: ['flower', 'fan', 'twin'], arms: 4, phaseTime: 4.0 },
     { name: 'DREADNOUGHT MK-VIII', color: '#b98cff', bullet: '#d4bcff', hpMul: 1.42, r: 56, move: 'chase',    moveSpd: 72,  phases: ['spiral', 'wall', 'aimed'], arms: 4, phaseTime: 3.8 },
     { name: 'DREADNOUGHT MK-IX',   color: '#ff8cd2', bullet: '#ffb8e4', hpMul: 1.56, r: 58, move: 'figure8',  phases: ['ring', 'flower', 'shotgun'], arms: 5,      phaseTime: 3.6 },
-    { name: 'DREADNOUGHT MK-X',    color: '#ff3b3b', bullet: '#ff7b5a', hpMul: 1.75, r: 62, move: 'teleport', phases: ['spiral', 'cross', 'fan', 'ring'], arms: 6, phaseTime: 3.3 },
+    { name: 'DREADNOUGHT OMEGA',   color: '#ff3b3b', bullet: '#ff7b5a', hpMul: 1.75, r: 80, move: 'teleport', phases: ['spiral', 'cross', 'fan', 'ring'], arms: 6, phaseTime: 3.3, final: true },
   ];
   const STAGES = BOSSES.length;
   const WAVES_PER_STAGE = 5;
@@ -546,9 +546,10 @@
     // Movement per boss.cfg.move + phase cycling + enrage as HP drops.
     updateBoss(e, dt, d) {
       const cfg = e.cfg;
+      const entryY = cfg.final ? 140 : 105; // the huge final boss sits lower
       if (!e.entered) {
         e.y += 70 * dt;
-        if (e.y >= 105) { e.y = 105; e.entered = true; }
+        if (e.y >= entryY) { e.y = entryY; e.entered = true; }
         return;
       }
       const hf = e.hp / e.maxHp;
@@ -582,6 +583,7 @@
         }
         default: e.x = cx + Math.sin(tt * 0.7) * amp; e.y = 104;
       }
+      if (cfg.final) e.y += 35; // keep the oversized final boss clear of the HP bar
       e.x = clamp(e.x, e.r + 4, W - e.r - 4);
     }
 
@@ -708,7 +710,7 @@
           // Cleared all stages — big victory flourish (endless play continues).
           this.won = true;
           this.cleared = true;
-          this.victoryT = 5;
+          this.victoryT = 8;
           this.sfx.play('victory');
           this.onWin();
           this.player.hp = this.player.maxHp;
@@ -1154,6 +1156,29 @@
             break;
           case 'boss': {
             ctx.rotate(Math.sin(e.t * 0.7) * 0.06);
+            // scale the artwork to the boss's radius (the final boss is much larger)
+            const bsc = e.r / 52;
+            ctx.scale(bsc, bsc);
+            const isFinal = !!(e.cfg && e.cfg.final);
+            if (isFinal) {
+              // OMEGA only: rotating gold blade-ring so the end boss reads instantly
+              ctx.save();
+              ctx.rotate(e.t * 0.5);
+              this.glow(ctx, '#ffd25a', 22);
+              ctx.strokeStyle = flash ? '#fff' : 'rgba(255,210,90,0.85)';
+              ctx.lineWidth = 4;
+              for (let k = 0; k < 6; k++) {
+                const a = (k / 6) * TAU;
+                ctx.beginPath(); ctx.arc(0, 0, 62, a, a + 0.62); ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(a) * 58, Math.sin(a) * 58);
+                ctx.lineTo(Math.cos(a) * 74, Math.sin(a) * 74);
+                ctx.stroke();
+              }
+              ctx.restore();
+              this.glow(ctx, e.color, 18);
+              ctx.fillStyle = flash ? '#ffffff' : e.color;
+            }
             // main hull
             ctx.beginPath();
             ctx.moveTo(0, 46); ctx.lineTo(-30, 26); ctx.lineTo(-52, -4); ctx.lineTo(-30, -34);
@@ -1161,8 +1186,8 @@
             ctx.closePath(); ctx.fill();
             ctx.fillStyle = flash ? '#fff' : '#5a0f0f';
             ctx.beginPath(); ctx.arc(0, 0, 22, 0, TAU); ctx.fill();
-            ctx.fillStyle = flash ? '#fff' : '#ff8c4d';
-            ctx.beginPath(); ctx.arc(0, 0, 10 + Math.sin(e.t * 5) * 2, 0, TAU); ctx.fill();
+            ctx.fillStyle = flash ? '#fff' : (isFinal ? '#ffd25a' : '#ff8c4d');
+            ctx.beginPath(); ctx.arc(0, 0, (isFinal ? 12 : 10) + Math.sin(e.t * 5) * 2, 0, TAU); ctx.fill();
             // turrets
             ctx.fillStyle = flash ? '#fff' : '#8c1f1f';
             ctx.beginPath(); ctx.arc(-34, 12, 8, 0, TAU); ctx.fill();
@@ -1396,13 +1421,24 @@
         ctx.save();
         ctx.textAlign = 'center';
         ctx.globalAlpha = clamp(g.victoryT, 0, 1);
-        this.glow(ctx, '#ffd25a', 26);
+        const vpulse = 1 + Math.sin(g.time * 4) * 0.03;
+        ctx.save();
+        ctx.translate(W / 2, H * 0.22);
+        ctx.scale(vpulse, vpulse);
+        this.glow(ctx, '#ffd25a', 30);
         ctx.fillStyle = '#ffe98a';
-        ctx.font = 'bold 30px monospace';
-        ctx.fillText('★ SECTOR CLEARED ★', W / 2, H * 0.24);
-        ctx.font = '13px monospace';
+        ctx.font = 'bold 34px monospace';
+        ctx.fillText('CONGRATULATIONS!', 0, 0);
+        ctx.restore();
+        this.glow(ctx, '#4df3ff', 18);
         ctx.fillStyle = '#eaffff';
-        ctx.fillText('ALL DREADNOUGHTS DESTROYED', W / 2, H * 0.24 + 26);
+        ctx.font = 'bold 18px monospace';
+        ctx.fillText('★ SECTOR CLEARED ★', W / 2, H * 0.22 + 34);
+        this.noGlow(ctx);
+        ctx.font = '12px monospace';
+        ctx.fillStyle = 'rgba(200,230,255,0.85)';
+        ctx.fillText('YOU DESTROYED ALL 10 DREADNOUGHTS', W / 2, H * 0.22 + 58);
+        ctx.fillText('THE VOID IS YOURS, PILOT', W / 2, H * 0.22 + 76);
         this.noGlow(ctx);
         ctx.restore();
       }
@@ -1492,11 +1528,11 @@
       ctx.fillText(g.isTouch ? 'DRAG to fly & fire      ✸ button to bomb' : 'MOVE  WASD / ARROWS      FIRE  SPACE      BOMB  X', W / 2, 350);
       ctx.fillText('collect chips to level up · beat a boss to advance', W / 2, 368);
 
-      // blinking prompt — first press/tap powers on (music), second launches
+      // blinking prompt — one press starts the game (music comes with it)
       ctx.globalAlpha = 0.5 + 0.5 * Math.sin(T * 5);
       ctx.font = 'bold 20px monospace';
-      if (g.audioReady) { this.glow(ctx, '#7dff4d', 16); ctx.fillStyle = '#c8ffb0'; ctx.fillText(g.isTouch ? 'TAP TO LAUNCH' : 'PRESS SPACE TO LAUNCH', W / 2, 410); }
-      else { this.glow(ctx, '#ffd25a', 16); ctx.fillStyle = '#ffe98a'; ctx.fillText(g.isTouch ? 'TAP TO START' : 'PRESS SPACE TO START', W / 2, 410); }
+      this.glow(ctx, '#7dff4d', 16); ctx.fillStyle = '#c8ffb0';
+      ctx.fillText(g.isTouch ? 'TAP TO LAUNCH' : 'PRESS SPACE TO LAUNCH', W / 2, 410);
       this.noGlow(ctx); ctx.globalAlpha = 1;
       ctx.restore();
     },
@@ -1707,10 +1743,7 @@
       KeyX: 'bomb', KeyK: 'bomb',
     };
     window.addEventListener('keydown', (ev) => {
-      const firstGesture = !audioUnlocked;
-      unlock();
-      // First Space on the menu just powers on (starts menu music) — it does not launch.
-      if (firstGesture && game.state === 'menu' && ev.code === 'Space') { ev.preventDefault(); return; }
+      unlock(); // the keypress itself is the audio-unlock gesture — start + music in one press
       if (ev.code === 'KeyP' && game.state === 'play') { paused = !paused; return; }
       if (ev.code === 'KeyM') { sfx.muted = !sfx.muted; return; }
       // --- test cheats ---
@@ -1741,10 +1774,9 @@
     };
     let dragId = null, prevX = 0, prevY = 0;
     canvas.addEventListener('pointerdown', (e) => {
-      const firstGesture = !audioUnlocked;
       unlock();
       if (game.state === 'over') return;        // results overlay handles retry
-      if (!firstGesture) input.fire = true;     // hold to fire; on the menu's 2nd tap this launches
+      input.fire = true;                        // one tap starts the game (and fires while held)
       if (game.state === 'play') {
         const pos = canvasPos(e);
         prevX = pos.x; prevY = pos.y;
