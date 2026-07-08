@@ -1543,6 +1543,7 @@
         case 'start': this.tone(392, 0.1, 'square', 0.06); this.tone(523, 0.1, 'square', 0.06, 1, 0.09); this.tone(659, 0.1, 'square', 0.06, 1, 0.18); this.tone(784, 0.2, 'square', 0.07, 1, 0.27); break;
         case 'collect': this.tone(988, 0.05, 'triangle', 0.07); this.tone(1319, 0.07, 'triangle', 0.06, 1, 0.04); this.tone(1760, 0.11, 'triangle', 0.05, 1, 0.09); break;
         case 'victory': [523, 659, 784, 1046, 1319].forEach((f, i) => this.tone(f, 0.5, 'square', 0.07, 1, i * 0.12)); this.tone(1568, 0.9, 'triangle', 0.06, 1, 0.62); break;
+        case 'fanfare': [784, 1047, 1319, 1568].forEach((f, i) => this.tone(f, 0.13, 'square', 0.06, 1, i * 0.07)); this.tone(1568, 0.5, 'triangle', 0.06, 1, 0.28); this.tone(2093, 0.5, 'triangle', 0.045, 1, 0.28); break;
       }
     }
 

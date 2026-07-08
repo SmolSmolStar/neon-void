@@ -478,7 +478,7 @@
     }).then(function (res) {
       if (res && res[1]) {
         showBanner(res[1].rank, res[1].total, score, wave);
-        if (res[1].rank === 1) { neonConfetti(); setStatus('★ TOP PILOT — #1 THIS WEEK! ★', 'ok'); }
+        if (res[1].rank === 1) { neonConfetti(); try { if (window.__sfx && window.__sfx.play) window.__sfx.play('fanfare'); } catch (e) {} setStatus('★ TOP PILOT — #1 THIS WEEK! ★', 'ok'); }
       }
     })
       .catch(function (err) { setStatus('save failed — ' + (err && err.message ? err.message.slice(0, 40) : 'try again'), 'err'); })
