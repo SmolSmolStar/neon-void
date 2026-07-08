@@ -1611,52 +1611,6 @@
       const T = g.time;
       const horizon = H * 0.74;
 
-      // --- THE VOID: a black hole on the horizon (the game's namesake) ---
-      const vx = W / 2, vy = horizon - 26, vr = 46;
-      // ambient halo
-      const hgr = ctx.createRadialGradient(vx, vy, vr * 0.5, vx, vy, vr * 2.6);
-      hgr.addColorStop(0, 'rgba(77,243,255,0.14)');
-      hgr.addColorStop(0.5, 'rgba(255,77,240,0.09)');
-      hgr.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = hgr;
-      ctx.fillRect(vx - vr * 2.6, vy - vr * 2.6, vr * 5.2, vr * 5.2);
-      // accretion-disk debris orbiting on a tilted ellipse (back half first)
-      const sparks = [];
-      for (let i = 0; i < 7; i++) {
-        const oa = T * (0.5 + i * 0.13) + i * 2.4;
-        const orx = vr + 12 + (i % 3) * 9;
-        sparks.push({ x: vx + Math.cos(oa) * orx, y: vy + Math.sin(oa) * orx * 0.3, front: Math.sin(oa) > 0, c: i % 2 ? '#ff9df6' : '#9df6ff' });
-      }
-      const drawSpark = (s) => {
-        this.glow(ctx, s.c, 10);
-        ctx.fillStyle = s.c;
-        ctx.beginPath(); ctx.arc(s.x, s.y, 1.8, 0, TAU); ctx.fill();
-        this.noGlow(ctx);
-      };
-      sparks.filter((s) => !s.front).forEach(drawSpark);
-      // swirling neon accretion ring (slowly rotating arc segments)
-      for (let i = 0; i < 6; i++) {
-        const a0 = T * (0.3 + (i % 3) * 0.08) * (i % 2 ? 1 : -1) + i * (TAU / 6);
-        const rr = vr + 5 + (i % 3) * 6;
-        ctx.save();
-        ctx.translate(vx, vy); ctx.rotate(a0);
-        this.glow(ctx, i % 2 ? '#ff4df0' : '#4df3ff', 14);
-        ctx.strokeStyle = i % 2 ? 'rgba(255,77,240,0.7)' : 'rgba(77,243,255,0.7)';
-        ctx.lineWidth = 2.4 - (i % 3) * 0.5;
-        ctx.beginPath(); ctx.arc(0, 0, rr, 0, 1.1 + (i % 3) * 0.4); ctx.stroke();
-        ctx.restore();
-      }
-      this.noGlow(ctx);
-      // event horizon: pure black core with a thin luminous rim
-      ctx.fillStyle = '#000000';
-      ctx.beginPath(); ctx.arc(vx, vy, vr, 0, TAU); ctx.fill();
-      this.glow(ctx, '#4df3ff', 16);
-      ctx.strokeStyle = 'rgba(190,245,255,0.85)';
-      ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.arc(vx, vy, vr, 0, TAU); ctx.stroke();
-      this.noGlow(ctx);
-      sparks.filter((s) => s.front).forEach(drawSpark);
-
       // --- perspective grid ---
       ctx.strokeStyle = 'rgba(255,77,240,0.5)'; ctx.lineWidth = 1;
       const scroll = (T * 0.4) % 1;
@@ -1669,6 +1623,70 @@
       ctx.globalAlpha = 0.3;
       for (let i = -7; i <= 7; i++) { ctx.beginPath(); ctx.moveTo(W / 2 + i * 9, horizon); ctx.lineTo(W / 2 + i * 72, H); ctx.stroke(); }
       ctx.globalAlpha = 1;
+
+      // --- hero shot: the pilot's ship rising off the grid ---
+      const sx = W / 2, sy = 516, S = 5;
+      // ascent speed-lines streaking past
+      for (let i = 0; i < 6; i++) {
+        const lx = sx + [-96, -64, 66, 98, -128, 126][i];
+        const ly = 425 + ((T * (150 + i * 35) + i * 91) % 215);
+        ctx.strokeStyle = 'rgba(120,220,255,' + (0.10 + (i % 3) * 0.06).toFixed(2) + ')';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx, ly + 24 + (i % 3) * 12); ctx.stroke();
+      }
+      // backlight halo + landing glow on the grid
+      const bl = ctx.createRadialGradient(sx, sy, 10, sx, sy, 135);
+      bl.addColorStop(0, 'rgba(77,243,255,0.18)');
+      bl.addColorStop(0.6, 'rgba(42,108,255,0.09)');
+      bl.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = bl; ctx.fillRect(sx - 135, sy - 135, 270, 270);
+      ctx.save();
+      ctx.translate(sx, sy + Math.sin(T * 1.8) * 5); // gentle hover bob
+      ctx.rotate(Math.sin(T * 0.9) * 0.03);
+      ctx.scale(S, S);
+      // engine flame — layered, flickering
+      const fl = 11 + Math.sin(T * 26) * 2.5 + Math.sin(T * 47) * 1.2;
+      this.glow(ctx, '#4df3ff', 22);
+      const fg2 = ctx.createLinearGradient(0, 12, 0, 12 + fl + 9);
+      fg2.addColorStop(0, 'rgba(214,255,255,0.95)');
+      fg2.addColorStop(0.35, 'rgba(120,200,255,0.75)');
+      fg2.addColorStop(1, 'rgba(255,77,240,0)');
+      ctx.fillStyle = fg2;
+      ctx.beginPath(); ctx.moveTo(-4.5, 12); ctx.lineTo(0, 12 + fl + 8); ctx.lineTo(4.5, 12); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath(); ctx.moveTo(-2, 12); ctx.lineTo(0, 12 + fl * 0.55); ctx.lineTo(2, 12); ctx.closePath(); ctx.fill();
+      // hull — same silhouette as the in-game ship, gradient + neon rim
+      this.glow(ctx, '#4df3ff', 26);
+      const hgrad = ctx.createLinearGradient(0, -16, 0, 13);
+      hgrad.addColorStop(0, '#ffffff');
+      hgrad.addColorStop(0.45, '#dffaff');
+      hgrad.addColorStop(1, '#8fc6ff');
+      ctx.fillStyle = hgrad;
+      ctx.beginPath();
+      ctx.moveTo(0, -16);
+      ctx.lineTo(-5, -2); ctx.lineTo(-14, 8); ctx.lineTo(-6, 10); ctx.lineTo(-4, 13);
+      ctx.lineTo(4, 13); ctx.lineTo(6, 10); ctx.lineTo(14, 8); ctx.lineTo(5, -2);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(77,243,255,0.85)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+      this.noGlow(ctx);
+      // cockpit glass + highlight
+      ctx.fillStyle = '#20e0ff';
+      ctx.beginPath(); ctx.ellipse(0, -4, 3, 6, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath(); ctx.ellipse(-0.9, -6.2, 0.9, 2.1, -0.35, 0, TAU); ctx.fill();
+      // wing accents (matching the in-game ship)
+      ctx.fillStyle = '#2a6cff';
+      ctx.beginPath(); ctx.moveTo(-14, 8); ctx.lineTo(-6, 10); ctx.lineTo(-8, 5); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(14, 8); ctx.lineTo(6, 10); ctx.lineTo(8, 5); ctx.closePath(); ctx.fill();
+      // magenta wingtip lights
+      this.glow(ctx, '#ff4df0', 12);
+      ctx.fillStyle = '#ff8df4';
+      ctx.beginPath(); ctx.arc(-13.4, 8, 0.9, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(13.4, 8, 0.9, 0, TAU); ctx.fill();
+      this.noGlow(ctx);
+      ctx.restore();
 
       // --- title: chromatic glow + bob ---
       const ty = H * 0.24 + Math.sin(T * 1.6) * 4;
@@ -1730,7 +1748,7 @@
       }
       ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = 'rgba(185,215,250,0.75)'; ctx.font = '11px monospace';
-      ctx.fillText('collect chips to level up · clear stages to raise the level cap', W / 2, 444);
+      ctx.fillText('collect chips to level up · clear stages to raise the level cap', W / 2, 330);
 
       // blinking prompt — below the void, resting on the grid
       ctx.fillStyle = 'rgba(3,1,9,0.6)';
@@ -1777,9 +1795,6 @@
       ctx.fillText(g.isTouch ? '∞ TAP FOR ENDLESS MODE ∞' : '∞ PRESS SPACE FOR ENDLESS MODE ∞', W / 2, H * 0.64);
       this.noGlow(ctx);
       ctx.globalAlpha = 1;
-      ctx.font = '11px monospace';
-      ctx.fillStyle = 'rgba(160,190,225,0.7)';
-      ctx.fillText('take a breather — the fight resumes when you are ready', W / 2, H * 0.64 + 24);
       ctx.restore();
     },
 
