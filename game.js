@@ -1624,28 +1624,33 @@
       for (let i = -7; i <= 7; i++) { ctx.beginPath(); ctx.moveTo(W / 2 + i * 9, horizon); ctx.lineTo(W / 2 + i * 72, H); ctx.stroke(); }
       ctx.globalAlpha = 1;
 
-      // --- hero shot: the pilot's ship rising off the grid ---
-      const sx = W / 2, sy = 516, S = 5;
-      // ascent speed-lines streaking past
+      // --- hero shot: the pilot's ship launches in from below, then hovers ---
+      const sx = W / 2, S = 5;
+      const intro = Math.min(1, T / 1.7);
+      const c1 = 1.1, c3 = c1 + 1; // ease-out-back: slight overshoot, then settle
+      const eb = 1 + c3 * Math.pow(intro - 1, 3) + c1 * Math.pow(intro - 1, 2);
+      const sy = (H + 150) + (516 - (H + 150)) * eb;
+      const thrust = 1 + (1 - intro) * 1.3; // burning hard during the climb
+      // ascent speed-lines streaking past (fiercer during the climb)
       for (let i = 0; i < 6; i++) {
         const lx = sx + [-96, -64, 66, 98, -128, 126][i];
-        const ly = 425 + ((T * (150 + i * 35) + i * 91) % 215);
-        ctx.strokeStyle = 'rgba(120,220,255,' + (0.10 + (i % 3) * 0.06).toFixed(2) + ')';
+        const ly = 425 + ((T * (150 + i * 35) * thrust + i * 91) % 215);
+        ctx.strokeStyle = 'rgba(120,220,255,' + Math.min(0.5, (0.10 + (i % 3) * 0.06) * thrust).toFixed(2) + ')';
         ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx, ly + 24 + (i % 3) * 12); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx, ly + (24 + (i % 3) * 12) * thrust); ctx.stroke();
       }
-      // backlight halo + landing glow on the grid
+      // backlight halo follows the ship
       const bl = ctx.createRadialGradient(sx, sy, 10, sx, sy, 135);
       bl.addColorStop(0, 'rgba(77,243,255,0.18)');
       bl.addColorStop(0.6, 'rgba(42,108,255,0.09)');
       bl.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = bl; ctx.fillRect(sx - 135, sy - 135, 270, 270);
       ctx.save();
-      ctx.translate(sx, sy + Math.sin(T * 1.8) * 5); // gentle hover bob
-      ctx.rotate(Math.sin(T * 0.9) * 0.03);
+      ctx.translate(sx, sy + Math.sin(T * 1.8) * 5 * intro); // hover bob once settled
+      ctx.rotate(Math.sin(T * 0.9) * 0.03 * intro);
       ctx.scale(S, S);
-      // engine flame — layered, flickering
-      const fl = 11 + Math.sin(T * 26) * 2.5 + Math.sin(T * 47) * 1.2;
+      // engine flame — layered, flickering, stretched by thrust
+      const fl = (11 + Math.sin(T * 26) * 2.5 + Math.sin(T * 47) * 1.2) * thrust;
       this.glow(ctx, '#4df3ff', 22);
       const fg2 = ctx.createLinearGradient(0, 12, 0, 12 + fl + 9);
       fg2.addColorStop(0, 'rgba(214,255,255,0.95)');
