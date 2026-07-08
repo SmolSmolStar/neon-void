@@ -157,6 +157,23 @@
         if (firePressed && this.overT > 1) this.start();
         return;
       }
+      if (this.state === 'victory') {
+        // a breather after the 10-stage campaign: the arena is frozen and safe;
+        // fireworks play until the player opts into endless mode
+        this.time += dt;
+        this.victoryT = Math.max(this.victoryT, 1); // keep celebrating while paused
+        this.updateParticles(dt);
+        if (Math.random() < 0.25)
+          this.burst(rand(60, W - 60), rand(70, H * 0.5), 14, ['#ffd25a', '#4df3ff', '#ff4df0', '#7dff4d'][randi(0, 3)]);
+        if (firePressed && this.time - this._victoryAt > 1) {
+          this.state = 'play';
+          this.victoryT = 3; // a last sparkle as endless begins
+          this.spawnT = 1.5; this.waveT = 0;
+          this.announce('∞ ENDLESS · STAGE ' + this.stage);
+          this.sfx.play('wave');
+        }
+        return;
+      }
 
       if (this.hitstop > 0) { this.hitstop -= dt; return; }
 
@@ -767,10 +784,13 @@
         this.shake = 30;
         this.haptic([25, 30, 25, 30, 70]);
         if (this.stage > STAGES && !this.won) {
-          // Cleared all stages — big victory flourish (endless play continues).
+          // Cleared all stages — pause into a victory screen (a breather);
+          // the player presses fire to opt into endless mode.
           this.won = true;
           this.cleared = true;
           this.victoryT = 8;
+          this.state = 'victory';
+          this._victoryAt = this.time;
           this.sfx.play('victory');
           this.onWin();
           this.player.hp = this.player.maxHp;
@@ -1125,7 +1145,7 @@
       this.drawEnemies(ctx, g);
       this.drawParticles(ctx, g);
       this.drawBullets(ctx, g);
-      if (g.player.alive && g.state === 'play') this.drawPlayer(ctx, g);
+      if (g.player.alive && (g.state === 'play' || g.state === 'victory')) this.drawPlayer(ctx, g);
       this.drawFloaters(ctx, g);
 
       ctx.restore();
@@ -1139,6 +1159,7 @@
       this.drawHUD(ctx, g);
       if (g.state === 'menu') this.drawMenu(ctx, g);
       if (g.state === 'over') this.drawGameOver(ctx, g);
+      if (g.state === 'victory') this.drawVictory(ctx, g);
     },
 
     glow(ctx, color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur; },
@@ -1550,33 +1571,15 @@
         ctx.globalAlpha = 1;
       }
 
-      // victory celebration (clearing all 10 stages)
-      if (g.victoryT > 0) {
+      // brief sparkle text right after resuming into endless mode
+      if (g.state === 'play' && g.victoryT > 0 && g.won) {
         ctx.save();
         ctx.textAlign = 'center';
-        ctx.globalAlpha = clamp(g.victoryT, 0, 1);
-        const vpulse = 1 + Math.sin(g.time * 4) * 0.03;
-        ctx.save();
-        ctx.translate(W / 2, H * 0.22);
-        ctx.scale(vpulse, vpulse);
-        this.glow(ctx, '#ffd25a', 30);
+        ctx.globalAlpha = clamp(g.victoryT / 3, 0, 1);
+        this.glow(ctx, '#ffd25a', 16);
         ctx.fillStyle = '#ffe98a';
-        ctx.font = 'bold 34px monospace';
-        ctx.fillText('CONGRATULATIONS!', 0, 0);
-        ctx.restore();
-        this.glow(ctx, '#4df3ff', 18);
-        ctx.fillStyle = '#eaffff';
-        ctx.font = 'bold 18px monospace';
-        ctx.fillText('★ SECTOR CLEARED ★', W / 2, H * 0.22 + 34);
-        this.noGlow(ctx);
-        ctx.font = '12px monospace';
-        ctx.fillStyle = 'rgba(200,230,255,0.85)';
-        ctx.fillText('YOU DESTROYED ALL 10 DREADNOUGHTS', W / 2, H * 0.22 + 58);
-        ctx.fillText('THE VOID IS YOURS, PILOT', W / 2, H * 0.22 + 76);
-        this.glow(ctx, '#ff4df0', 10);
-        ctx.fillStyle = '#ffd6f8';
-        ctx.font = 'bold 13px monospace';
-        ctx.fillText('∞ ENDLESS MODE BEGINS — GO FOR THE RECORD ∞', W / 2, H * 0.22 + 102);
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText('∞ THE VOID IS YOURS — GO FOR THE RECORD ∞', W / 2, H * 0.2);
         this.noGlow(ctx);
         ctx.restore();
       }
@@ -1661,17 +1664,91 @@
         ctx.fillText('★ SECTOR CLEARED — MASTER PILOT ★', W / 2, ty + 136); this.noGlow(ctx);
       }
 
-      // controls (kept above the sun so nothing overlaps) — adapt to input type
-      ctx.fillStyle = 'rgba(175,205,240,0.6)'; ctx.font = '11px monospace';
-      ctx.fillText(g.isTouch ? 'DRAG to fly & fire      ✸ button to bomb' : 'MOVE  WASD / ARROWS      FIRE  SPACE      BOMB  X', W / 2, 350);
-      ctx.fillText('collect chips to level up · higher stages unlock higher levels', W / 2, 368);
+      // controls — bright keycap boxes so nobody misses BOMB or PAUSE
+      const keycap = (kx, ky, label) => {
+        const kw = Math.max(24, label.length * 8 + 12), kh = 19, r = 4;
+        const x0 = kx - kw / 2, y0 = ky - kh / 2;
+        ctx.beginPath();
+        ctx.moveTo(x0 + r, y0); ctx.lineTo(x0 + kw - r, y0); ctx.arcTo(x0 + kw, y0, x0 + kw, y0 + r, r);
+        ctx.lineTo(x0 + kw, y0 + kh - r); ctx.arcTo(x0 + kw, y0 + kh, x0 + kw - r, y0 + kh, r);
+        ctx.lineTo(x0 + r, y0 + kh); ctx.arcTo(x0, y0 + kh, x0, y0 + kh - r, r);
+        ctx.lineTo(x0, y0 + r); ctx.arcTo(x0, y0, x0 + r, y0, r);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(10,10,30,0.85)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(255,210,90,0.85)'; ctx.lineWidth = 1.2; ctx.stroke();
+        ctx.fillStyle = '#ffe98a'; ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(label, kx, ky + 0.5);
+        return kw;
+      };
+      const control = (cx2, cy2, key, label) => {
+        const kw = keycap(cx2, cy2, key);
+        ctx.fillStyle = '#eaffff'; ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(label, cx2 + kw / 2 + 9, cy2 + 0.5);
+      };
+      if (g.isTouch) {
+        control(130, 352, 'DRAG', 'FLY + AUTO-FIRE');
+        control(130, 382, '✸', 'BOMB (button, bottom-right)');
+      } else {
+        control(105, 352, 'WASD', 'MOVE');
+        control(300, 352, 'SPACE', 'FIRE');
+        control(105, 382, 'X', 'BOMB');
+        control(300, 382, 'P', 'PAUSE');
+        control(105, 412, 'M', 'MUTE');
+      }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = 'rgba(185,215,250,0.75)'; ctx.font = '11px monospace';
+      ctx.fillText('collect chips to level up · clear stages to raise the level cap', W / 2, 444);
 
       // blinking prompt — one press starts the game (music comes with it)
-      ctx.globalAlpha = 0.5 + 0.5 * Math.sin(T * 5);
+      ctx.fillStyle = 'rgba(3,1,9,0.6)';
+      ctx.fillRect(W / 2 - 160, 460, 320, 30); // backing band so the prompt reads over the sun
+      ctx.globalAlpha = 0.55 + 0.45 * Math.sin(T * 5);
       ctx.font = 'bold 20px monospace';
       this.glow(ctx, '#7dff4d', 16); ctx.fillStyle = '#c8ffb0';
-      ctx.fillText(g.isTouch ? 'TAP TO LAUNCH' : 'PRESS SPACE TO LAUNCH', W / 2, 410);
+      ctx.fillText(g.isTouch ? 'TAP TO LAUNCH' : 'PRESS SPACE TO LAUNCH', W / 2, 481);
       this.noGlow(ctx); ctx.globalAlpha = 1;
+      ctx.restore();
+    },
+
+    drawVictory(ctx, g) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(4,2,14,0.66)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      const vpulse = 1 + Math.sin(g.time * 4) * 0.03;
+      ctx.save();
+      ctx.translate(W / 2, H * 0.28);
+      ctx.scale(vpulse, vpulse);
+      this.glow(ctx, '#ffd25a', 30);
+      ctx.fillStyle = '#ffe98a';
+      ctx.font = 'bold 34px monospace';
+      ctx.fillText('CONGRATULATIONS!', 0, 0);
+      ctx.restore();
+      this.glow(ctx, '#4df3ff', 18);
+      ctx.fillStyle = '#eaffff';
+      ctx.font = 'bold 18px monospace';
+      ctx.fillText('★ SECTOR CLEARED ★', W / 2, H * 0.28 + 38);
+      this.noGlow(ctx);
+      ctx.font = '13px monospace';
+      ctx.fillStyle = 'rgba(200,230,255,0.9)';
+      ctx.fillText('ALL 10 DREADNOUGHTS DESTROYED', W / 2, H * 0.28 + 66);
+      ctx.fillText('THE VOID IS YOURS, PILOT', W / 2, H * 0.28 + 86);
+      ctx.font = 'bold 16px monospace';
+      ctx.fillStyle = '#ffd25a';
+      ctx.fillText('SCORE  ' + g.score.toLocaleString(), W / 2, H * 0.28 + 122);
+      // endless is opt-in — take a breather first
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(g.time * 4);
+      this.glow(ctx, '#ff4df0', 14);
+      ctx.fillStyle = '#ffd6f8';
+      ctx.font = 'bold 17px monospace';
+      ctx.fillText(g.isTouch ? '∞ TAP FOR ENDLESS MODE ∞' : '∞ PRESS SPACE FOR ENDLESS MODE ∞', W / 2, H * 0.64);
+      this.noGlow(ctx);
+      ctx.globalAlpha = 1;
+      ctx.font = '11px monospace';
+      ctx.fillStyle = 'rgba(160,190,225,0.7)';
+      ctx.fillText('take a breather — the fight resumes when you are ready', W / 2, H * 0.64 + 24);
       ctx.restore();
     },
 

@@ -533,8 +533,9 @@
           showOverlay();
         } else {
           // A new round is starting → reset the field guide so players
-          // rediscover every hostile and pickup from scratch.
-          if (g.state === 'play') { discovered.clear(); revealing = {}; renderCodex(); }
+          // rediscover every hostile and pickup from scratch. (Continuing from
+          // the victory screen into endless mode is the SAME run — no reset.)
+          if (g.state === 'play' && (prevState === 'menu' || prevState === 'over')) { discovered.clear(); revealing = {}; renderCodex(); }
           hideOverlay(); setStatus('');
         }
         prevState = g.state;
