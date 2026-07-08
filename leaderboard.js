@@ -5,10 +5,13 @@
  *
  *  • CODEX  — a persistent left-side field guide. Each enemy, boss and pickup
  *             stays locked ("???") until the first time it appears in a run,
- *             then reveals with a NEW flash. Discoveries persist (localStorage).
+ *             then reveals with a NEW flash. Reset every round (rediscover anew).
  *  • BOARD  — the global leaderboard only appears at the END of a round, as a
- *             results overlay (Rank · Pilot · Score · Wave · Date) with a
+ *             results overlay (Rank · Pilot · Score · Stage · Date) with a
  *             "YOU PLACED #N" callout, following classic shmup results screens.
+ *
+ * Visual identity matches the game: monospace + neon (cyan #4df3ff / magenta
+ * #ff4df0 / gold #ffd25a / green #5affc8) glowing on near-black #06040f.
  *
  * The `key` is the PUBLIC publishable key — safe to ship. Writes are locked down
  * by row-level-security (insert-only, sanity-checked); nobody can wipe the board.
@@ -29,7 +32,6 @@
 
   var LS_NAME = 'neonvoid_name';
   var LS_CACHE = 'neonvoid_lb_cache';
-  var LS_CODEX = 'neonvoid_codex';
   var TAU = Math.PI * 2;
 
   // --- Supabase REST ------------------------------------------------------
@@ -75,8 +77,6 @@
   function writeCache(rows) { try { localStorage.setItem(LS_CACHE, JSON.stringify(rows.slice(0, CFG.top))); } catch (e) {} }
   function getName() { try { return (localStorage.getItem(LS_NAME) || '').slice(0, 20); } catch (e) { return ''; } }
   function setName(v) { try { localStorage.setItem(LS_NAME, v.slice(0, 20)); } catch (e) {} }
-  function readDiscovered() { try { return new Set(JSON.parse(localStorage.getItem(LS_CODEX) || '[]')); } catch (e) { return new Set(); } }
-  function saveDiscovered(s) { try { localStorage.setItem(LS_CODEX, JSON.stringify(Array.from(s))); } catch (e) {} }
   function fmtDate(iso) { if (!iso) return '—'; var d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
   function fmtDateFull(iso) { if (!iso) return ''; var d = new Date(iso); return isNaN(d.getTime()) ? '' : d.toLocaleString(); }
 
@@ -208,8 +208,8 @@
 
   function h(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
 
-  // --- CODEX (persistent, progressive) ------------------------------------
-  var discovered = readDiscovered();
+  // --- CODEX (progressive, reset each round) ------------------------------
+  var discovered = new Set(); // in-memory only — cleared at the start of every round
   var revealing = {}; // id -> true while flashing NEW
   var codexEl = {};
 
@@ -252,7 +252,7 @@
 
   function discover(id) {
     if (!BY_ID[id] || discovered.has(id)) return;
-    discovered.add(id); saveDiscovered(discovered);
+    discovered.add(id);
     revealing[id] = true; renderCodex();
     setTimeout(function () { delete revealing[id]; renderCodex(); }, 2600);
   }
@@ -269,7 +269,7 @@
     card.appendChild(h('div', 'sub', 'NEON VOID · GLOBAL'));
     lbEl.banner = h('div', 'banner hidden'); card.appendChild(lbEl.banner);
     var head = h('div', 'hrow');
-    ['#', 'PILOT', 'SCORE', 'WV', 'DATE'].forEach(function (t, i) { head.appendChild(h('span', ['c-rk', 'c-nm', 'c-sc', 'c-wv', 'c-dt'][i], t)); });
+    ['#', 'PILOT', 'SCORE', 'STG', 'DATE'].forEach(function (t, i) { head.appendChild(h('span', ['c-rk', 'c-nm', 'c-sc', 'c-wv', 'c-dt'][i], t)); });
     card.appendChild(head);
     var scroll = h('div', 'scroll'); lbEl.list = h('ol'); scroll.appendChild(lbEl.list); card.appendChild(scroll);
 
@@ -304,7 +304,7 @@
     var suf = (rank % 10 === 1 && rank !== 11) ? 'ST' : (rank % 10 === 2 && rank !== 12) ? 'ND' : (rank % 10 === 3 && rank !== 13) ? 'RD' : 'TH';
     lbEl.banner.appendChild(h('div', 'big', 'YOU PLACED ' + rank + suf));
     var meta = score.toLocaleString() + ' PTS';
-    if (hasWave && wave > 0) meta += ' · WAVE ' + wave;
+    if (hasWave && wave > 0) meta += ' · STAGE ' + wave;
     meta += ' · #' + rank + ' of ' + tot;
     lbEl.banner.appendChild(h('div', 'small', meta));
     lbEl.banner.classList.remove('hidden');
@@ -350,7 +350,7 @@
 
   function onManualSubmit() {
     var g = window.__game;
-    if (g && g.state === 'over' && g.score > 0) return doSubmit(lbEl.input.value, g.score, g.wave, {});
+    if (g && g.state === 'over' && g.score > 0) return doSubmit(lbEl.input.value, g.score, g.stage, {});
     setName(lbEl.input.value.trim()); setStatus(lbEl.input.value.trim() ? 'handle saved' : '', 'ok');
   }
 
@@ -376,10 +376,13 @@
         if (g.state === 'over') {
           lbEl.banner.classList.add('hidden');
           var nm = getName();
-          if (nm && g.score > 0) doSubmit(nm, g.score, g.wave, { auto: true });
+          if (nm && g.score > 0) doSubmit(nm, g.score, g.stage, { auto: true });
           else { if (g.score > 0) setStatus('enter a handle, then SAVE your ' + g.score.toLocaleString() + ' pt run', ''); refresh(); }
           showOverlay();
         } else {
+          // A new round is starting → reset the field guide so players
+          // rediscover every hostile and pickup from scratch.
+          if (g.state === 'play') { discovered.clear(); revealing = {}; renderCodex(); }
           hideOverlay(); setStatus('');
         }
         prevState = g.state;

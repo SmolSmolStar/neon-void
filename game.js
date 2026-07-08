@@ -36,6 +36,24 @@
     boss:    { hp: 320, r: 52, score: 5000, color: '#ff3b3b', drop: 1 },
   };
 
+  // ---------- Dreadnought bosses (one per stage, escalating) ----------
+  // move   = movement pattern,  phases = attack patterns it cycles through,
+  // arms   = spiral/flower arm count,  hpMul = HP multiplier over the stage base.
+  const BOSSES = [
+    { name: 'DREADNOUGHT MK-I',    color: '#ff6b6b', bullet: '#ff9b6b', hpMul: 0.85, r: 50, move: 'hover',    phases: ['aimed', 'ring'],                          phaseTime: 5.0 },
+    { name: 'DREADNOUGHT MK-II',   color: '#ff8c4d', bullet: '#ffb066', hpMul: 0.95, r: 50, move: 'pace',     moveSpd: 80,  phases: ['fan', 'twin'],              phaseTime: 5.0 },
+    { name: 'DREADNOUGHT MK-III',  color: '#ffd25a', bullet: '#ffe08a', hpMul: 1.00, r: 52, move: 'sweep',    phases: ['ring', 'spiral'],   arms: 2,              phaseTime: 4.5 },
+    { name: 'DREADNOUGHT MK-IV',   color: '#7dff4d', bullet: '#b6ff7a', hpMul: 1.06, r: 52, move: 'dive',     phases: ['aimed', 'wall'],                          phaseTime: 4.5 },
+    { name: 'DREADNOUGHT MK-V',    color: '#5affc8', bullet: '#8affda', hpMul: 1.12, r: 54, move: 'figure8',  phases: ['spiral', 'fan'],    arms: 3,              phaseTime: 4.5 },
+    { name: 'DREADNOUGHT MK-VI',   color: '#4dc3ff', bullet: '#8ad8ff', hpMul: 1.20, r: 54, move: 'teleport', phases: ['cross', 'shotgun'],                       phaseTime: 4.0 },
+    { name: 'DREADNOUGHT MK-VII',  color: '#4df3ff', bullet: '#8af6ff', hpMul: 1.30, r: 56, move: 'pace',     moveSpd: 120, phases: ['flower', 'fan', 'twin'], arms: 4, phaseTime: 4.0 },
+    { name: 'DREADNOUGHT MK-VIII', color: '#b98cff', bullet: '#d4bcff', hpMul: 1.42, r: 56, move: 'chase',    moveSpd: 72,  phases: ['spiral', 'wall', 'aimed'], arms: 4, phaseTime: 3.8 },
+    { name: 'DREADNOUGHT MK-IX',   color: '#ff8cd2', bullet: '#ffb8e4', hpMul: 1.56, r: 58, move: 'figure8',  phases: ['ring', 'flower', 'shotgun'], arms: 5,      phaseTime: 3.6 },
+    { name: 'DREADNOUGHT MK-X',    color: '#ff3b3b', bullet: '#ff7b5a', hpMul: 1.75, r: 62, move: 'teleport', phases: ['spiral', 'cross', 'fan', 'ring'], arms: 6, phaseTime: 3.3 },
+  ];
+  const STAGES = BOSSES.length;
+  const WAVES_PER_STAGE = 5;
+
   // ============================================================
   // Game
   // ============================================================
@@ -51,10 +69,10 @@
 
     reset() {
       this.player = {
-        x: W / 2, y: H - 90, r: 11, hp: 3, maxHp: 3,
+        x: W / 2, y: H - 90, r: 11, hp: 5, maxHp: 5,
         shield: 0, inv: 0, fireCd: 0,
         weapon: 'blaster', level: 1,
-        bombs: 2, alive: true, tilt: 0, engine: 0,
+        bombs: 3, alive: true, tilt: 0, engine: 0,
       };
       this.bullets = [];
       this.ebullets = [];
@@ -67,12 +85,13 @@
       this.comboT = 0;
       this.kills = 0;
       this.time = 0;
-      this.wave = 0;
+      this.stage = 1;          // 1..STAGES (then endless)
+      this.wave = 1;           // 1..WAVES_PER_STAGE within the stage
       this.waveT = 0;
-      this.spawnT = 1.2;
+      this.spawnT = 1.4;
       this.killsSinceDrop = 5; // pity counter starts warm so first drops come fast
       this.bossActive = false;
-      this.nextBossWave = 5;
+      this.won = false;
       this.shake = 0;
       this.hitstop = 0;
       this.flash = 0;
@@ -83,13 +102,16 @@
     start() {
       this.reset();
       this.state = 'play';
-      this.announce('WAVE 1');
+      this.stage = 1;
       this.wave = 1;
+      this.announce('STAGE 1');
       this.sfx.play('start');
     }
 
+    // Smooth, mostly stage-driven ramp. Gentle in stage 1 so players survive to
+    // the first boss; scales up steadily across the 10 stages (then endless).
     difficulty() {
-      return 1 + this.time / 45 + (this.wave - 1) * 0.22;
+      return 1 + (this.stage - 1) * 0.42 + (this.wave - 1) * 0.05 + this.time * 0.0022;
     }
 
     announce(text) {
@@ -272,15 +294,15 @@
 
     // ---------- spawning ----------
     updateSpawning(dt) {
-      // wave progression
+      const WAVE_DUR = 11; // seconds per wave; a stage = 5 waves + a boss
       this.waveT += dt;
-      if (this.waveT > 18 && !this.bossActive) {
+      if (!this.bossActive && this.waveT > WAVE_DUR) {
         this.waveT = 0;
-        this.wave++;
-        if (this.wave >= this.nextBossWave) {
+        if (this.wave >= WAVES_PER_STAGE) {
           this.spawnBoss();
         } else {
-          this.announce('WAVE ' + this.wave);
+          this.wave++;
+          this.announce('WAVE ' + this.wave + '/' + WAVES_PER_STAGE);
           this.sfx.play('wave');
         }
       }
@@ -288,31 +310,40 @@
 
       this.spawnT -= dt;
       const d = this.difficulty();
-      if (this.spawnT <= 0) {
-        this.spawnT = Math.max(0.25, 1.25 - d * 0.09) * rand(0.7, 1.3);
+      // Cap concurrent hostiles so early stages never swarm the player.
+      const cap = 4 + this.stage * 2;
+      if (this.spawnT <= 0 && this.enemies.length < cap) {
+        this.spawnT = Math.max(0.45, 1.5 - d * 0.07) * rand(0.75, 1.25);
         this.spawnEnemy(d);
       }
     }
 
     spawnEnemy(d) {
-      const roll = Math.random();
+      // Progressive roster — new hostiles are introduced as stages advance,
+      // so each stage brings a fresh threat (classic shmup progression).
+      const roster = ['darter', 'drone'];
+      if (this.stage >= 2) roster.push('weaver');
+      if (this.stage >= 3) roster.push('splitter');
+      if (this.stage >= 4) roster.push('tank');
       let type;
-      if (roll < 0.34) type = 'darter';
-      else if (roll < 0.58) type = 'drone';
-      else if (roll < 0.76) type = 'weaver';
-      else if (roll < 0.9) type = 'splitter';
-      else type = 'tank';
-      // early game: simpler enemies
-      if (d < 1.5 && (type === 'tank' || type === 'splitter')) type = Math.random() < 0.5 ? 'darter' : 'drone';
+      if (this.stage <= 1) {
+        type = Math.random() < 0.6 ? 'darter' : 'drone';
+      } else {
+        const weights = roster.map((tp) => tp === 'tank' ? 0.5 + this.stage * 0.07 : tp === 'splitter' ? 0.7 : tp === 'weaver' ? 1.0 : 1.4);
+        const tot = weights.reduce((a, b) => a + b, 0);
+        let acc = Math.random() * tot;
+        type = roster[0];
+        for (let i = 0; i < roster.length; i++) { acc -= weights[i]; if (acc <= 0) { type = roster[i]; break; } }
+      }
 
       const t = ENEMY_TYPES[type];
       const x = rand(40, W - 40);
       const e = {
         type, x, y: -30, r: t.r,
-        hp: Math.ceil(t.hp * (0.8 + d * 0.28)), maxHp: 0,
+        hp: Math.ceil(t.hp * (0.85 + d * 0.24)), maxHp: 0,
         color: t.color, score: t.score, dropChance: t.drop,
-        t: rand(0, TAU), fireT: rand(0.6, 2.2), hitT: 0,
-        vx: 0, vy: 0, baseX: x, spd: (0.85 + d * 0.06),
+        t: rand(0, TAU), fireT: rand(0.8, 2.4), hitT: 0,
+        vx: 0, vy: 0, baseX: x, spd: (0.85 + d * 0.055),
       };
       e.maxHp = e.hp;
       this.enemies.push(e);
@@ -334,19 +365,17 @@
 
     spawnBoss() {
       this.bossActive = true;
-      this.nextBossWave = this.wave + 5;
-      this.announce('!! DREADNOUGHT !!');
+      const cfg = BOSSES[(this.stage - 1) % STAGES];
+      this.announce('!! ' + cfg.name + ' !!');
       this.sfx.play('boss');
-      const d = this.difficulty();
-      const t = ENEMY_TYPES.boss;
+      const hp = Math.round((280 + this.stage * 210) * cfg.hpMul);
       const e = {
-        type: 'boss', x: W / 2, y: -80, r: t.r,
-        hp: Math.ceil(t.hp * (0.7 + d * 0.35)), maxHp: 0,
-        color: t.color, score: Math.floor(t.score * d), dropChance: 1,
-        t: 0, fireT: 1.5, hitT: 0, phase: 0, phaseT: 0,
+        type: 'boss', cfg, x: W / 2, y: -80, r: cfg.r,
+        hp, maxHp: hp, color: cfg.color, score: 4000 + this.stage * 1200, dropChance: 1,
+        t: 0, fireT: 2.0, hitT: 0, atkIdx: 0, atkT: 0, spiralA: rand(0, TAU),
+        enrage: 0, entered: false, dir: 1, tpT: 0, tpX: W / 2,
         vx: 0, vy: 0, baseX: W / 2, spd: 1,
       };
-      e.maxHp = e.hp;
       this.enemies.push(e);
     }
 
@@ -383,15 +412,7 @@
           case 'tank':
             e.y += (46 + d * 7) * sp * dt;
             break;
-          case 'boss': {
-            e.phaseT += dt;
-            if (e.y < 110) e.y += 60 * dt;
-            else {
-              e.x = W / 2 + Math.sin(e.t * 0.7) * (W / 2 - 90);
-              if (e.phaseT > 6) { e.phaseT = 0; e.phase = (e.phase + 1) % 3; }
-            }
-            break;
-          }
+          case 'boss': this.updateBoss(e, dt, d); break;
         }
 
         // enemy shooting
@@ -431,29 +452,126 @@
           e.fireT = rand(1.6, 2.6) / Math.sqrt(d);
           aimAt(0.06, bs * 1.1); aimAt(0.3, bs * 0.9);
           break;
-        case 'boss': {
-          const ph = e.phase;
-          if (ph === 0) { // aimed bursts
-            e.fireT = 0.5 / Math.sqrt(d);
-            aimAt(0.12, bs * 1.15);
-          } else if (ph === 1) { // rings
-            e.fireT = 1.1;
-            const n = 14 + Math.floor(d * 2);
-            const off = e.t * 0.9;
-            for (let k = 0; k < n; k++) {
-              const a = off + (k / n) * TAU;
-              this.ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * bs * 0.75, vy: Math.sin(a) * bs * 0.75, r: 5, color: '#ff9b4d' });
-            }
-            this.sfx.play('bossShoot');
-          } else { // twin streams
-            e.fireT = 0.16;
-            const a = Math.PI / 2 + Math.sin(e.t * 2.4) * 0.8;
-            for (const s of [-1, 1]) {
-              this.ebullets.push({ x: e.x + s * 34, y: e.y + 20, vx: Math.cos(a) * bs, vy: Math.sin(a) * bs, r: 4.5, color: '#ff5ad2' });
-            }
+        case 'boss': this.bossFire(e, d); break;
+      }
+    }
+
+    // Movement per boss.cfg.move + phase cycling + enrage as HP drops.
+    updateBoss(e, dt, d) {
+      const cfg = e.cfg;
+      if (!e.entered) {
+        e.y += 70 * dt;
+        if (e.y >= 105) { e.y = 105; e.entered = true; }
+        return;
+      }
+      const hf = e.hp / e.maxHp;
+      e.enrage = hf < 0.25 ? 2 : hf < 0.55 ? 1 : 0;
+      e.atkT += dt;
+      if (e.atkT > cfg.phaseTime) { e.atkT = 0; e.atkIdx = (e.atkIdx + 1) % cfg.phases.length; }
+
+      const cx = W / 2, tt = e.t, amp = W / 2 - e.r - 6;
+      switch (cfg.move) {
+        case 'hover': e.x = cx + Math.sin(tt * 1.0) * 44; e.y = 100 + Math.sin(tt * 0.8) * 10; break;
+        case 'pace': {
+          const s = cfg.moveSpd || 80;
+          e.x += e.dir * s * dt;
+          if (e.x < e.r + 8) { e.x = e.r + 8; e.dir = 1; }
+          if (e.x > W - e.r - 8) { e.x = W - e.r - 8; e.dir = -1; }
+          e.y = 100; break;
+        }
+        case 'sweep': e.x = cx + Math.sin(tt * 0.7) * amp; e.y = 104 + Math.sin(tt * 1.3) * 8; break;
+        case 'figure8': e.x = cx + Math.sin(tt * (0.9 + e.enrage * 0.12)) * amp; e.y = 120 + Math.sin(tt * 1.8) * 46; break;
+        case 'chase': {
+          const s = cfg.moveSpd || 70;
+          e.x += clamp(this.player.x - e.x, -s * dt, s * dt);
+          e.y = 100 + Math.sin(tt * 1.1) * 8; break;
+        }
+        case 'dive': e.x = cx + Math.sin(tt * 0.6) * amp; e.y = 105 + Math.max(0, Math.sin(tt * 0.7)) * 175; break;
+        case 'teleport': {
+          e.tpT += dt;
+          if (e.tpT > (2.2 - e.enrage * 0.4)) { e.tpT = 0; e.tpX = rand(e.r + 20, W - e.r - 20); this.burst(e.x, e.y, 12, cfg.color); }
+          e.x += (e.tpX - e.x) * Math.min(1, dt * 9);
+          e.y = 100 + Math.sin(tt * 1.4) * 10; break;
+        }
+        default: e.x = cx + Math.sin(tt * 0.7) * amp; e.y = 104;
+      }
+      e.x = clamp(e.x, e.r + 4, W - e.r - 4);
+    }
+
+    // Per-boss shooting patterns (data-driven by boss.cfg.phases).
+    bossFire(e, d) {
+      const p = this.player, cfg = e.cfg;
+      const col = cfg.bullet || '#ff9b4d';
+      const enr = 1 + e.enrage * 0.4;                 // faster when enraged
+      const base = 150 + this.stage * 6 + d * 6;      // bullet speed (dodgeable)
+      const shoot = (a, s, r, c) => this.ebullets.push({ x: e.x, y: e.y + 6, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: r || 5, color: c || col });
+      const aim = Math.atan2(p.y - e.y, p.x - e.x);
+      switch (cfg.phases[e.atkIdx]) {
+        case 'aimed':
+          e.fireT = 0.6 / enr;
+          for (let k = -1; k <= 1; k++) shoot(aim + k * 0.16, base * 1.1);
+          break;
+        case 'fan': {
+          e.fireT = 1.0 / enr;
+          const n = 5 + this.stage + e.enrage;
+          for (let i = 0; i < n; i++) shoot(aim + (i / (n - 1) - 0.5) * 0.95, base);
+          break;
+        }
+        case 'ring': {
+          e.fireT = 1.1 / enr;
+          const n = 12 + this.stage + e.enrage * 4;
+          const off = e.t * 0.7;
+          for (let k = 0; k < n; k++) shoot(off + (k / n) * TAU, base * 0.82);
+          this.sfx.play('bossShoot');
+          break;
+        }
+        case 'spiral': {
+          e.fireT = 0.085;
+          const arms = cfg.arms || 2;
+          e.spiralA += 0.28 + e.enrage * 0.05;
+          for (let k = 0; k < arms; k++) shoot(e.spiralA + (k / arms) * TAU, base * 0.9);
+          break;
+        }
+        case 'flower': {
+          e.fireT = 0.11;
+          const arms = cfg.arms || 5;
+          e.spiralA += 0.6;
+          for (let k = 0; k < arms; k++) shoot(e.spiralA + (k / arms) * TAU, base * 0.85);
+          break;
+        }
+        case 'twin': {
+          e.fireT = 0.13;
+          const a = Math.PI / 2 + Math.sin(e.t * 2.4) * 0.85;
+          for (const s of [-1, 1]) this.ebullets.push({ x: e.x + s * (e.r * 0.6), y: e.y + 16, vx: Math.cos(a) * base, vy: Math.sin(a) * base, r: 4.5, color: col });
+          break;
+        }
+        case 'cross': {
+          e.fireT = 0.5 / enr;
+          const rot = e.t * 1.1;
+          const dirs = 4 + (e.enrage >= 2 ? 4 : 0);
+          for (let k = 0; k < dirs; k++) shoot(rot + (k / dirs) * TAU, base * 0.95);
+          break;
+        }
+        case 'shotgun': {
+          e.fireT = 1.2 / enr;
+          const n = 6 + this.stage;
+          for (let i = 0; i < n; i++) shoot(aim + rand(-0.5, 0.5), base * rand(0.8, 1.2));
+          this.sfx.play('bossShoot');
+          break;
+        }
+        case 'wall': {
+          e.fireT = 1.5 / enr;
+          const n = 11, gap = randi(1, n - 3);
+          for (let i = 0; i < n; i++) {
+            if (i === gap || i === gap + 1) continue; // a safe lane to slide into
+            const bx = 24 + (i / (n - 1)) * (W - 48);
+            this.ebullets.push({ x: bx, y: e.y, vx: 0, vy: base * 0.72, r: 5, color: col });
           }
           break;
         }
+        default:
+          e.fireT = 0.7 / enr;
+          shoot(aim, base);
       }
     }
 
@@ -490,12 +608,14 @@
       if (e.type === 'boss') {
         this.bossActive = false;
         this.waveT = 0;
-        this.wave++;
-        this.announce('DREADNOUGHT DOWN');
+        this.stage++;
+        this.wave = 1;
         this.flash = 1;
         this.shake = 30;
-        // shower of drops
-        for (let i = 0; i < 4; i++) this.spawnDrop(e.x + rand(-50, 50), e.y + rand(-30, 30), true);
+        if (this.stage > STAGES && !this.won) { this.won = true; this.announce('SECTOR CLEARED!'); }
+        else this.announce('STAGE ' + this.stage);
+        // shower of drops as a reward
+        for (let i = 0; i < 5; i++) this.spawnDrop(e.x + rand(-60, 60), e.y + rand(-30, 30), true);
         // clear enemy bullets as reward
         this.ebullets.length = 0;
       } else if (Math.random() < e.dropChance || this.killsSinceDrop >= 7) {
@@ -1023,11 +1143,11 @@
           ctx.fillText('x' + g.combo.toFixed(1), W / 2, 10);
           this.noGlow(ctx);
         }
-        // wave
+        // stage / wave
         ctx.textAlign = 'right';
         ctx.font = '12px monospace';
         ctx.fillStyle = 'rgba(160,200,255,0.7)';
-        ctx.fillText('WAVE ' + g.wave, W - 12, 12);
+        ctx.fillText(g.bossActive ? 'STAGE ' + g.stage + ' · BOSS' : 'STAGE ' + g.stage + ' · ' + g.wave + '/' + 5, W - 12, 12);
 
         // hull pips
         for (let i = 0; i < p.maxHp; i++) {
@@ -1085,14 +1205,21 @@
         ctx.globalAlpha = 1;
       }
 
-      // boss health bar
+      // boss name + health bar
       const boss = g.enemies.find(e => e.type === 'boss');
       if (boss && boss.y > 0) {
         const frac = clamp(boss.hp / boss.maxHp, 0, 1);
+        const bcol = (boss.cfg && boss.cfg.color) || '#ff3b3b';
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 11px monospace';
+        this.glow(ctx, bcol, 8);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText((boss.cfg && boss.cfg.name) || 'DREADNOUGHT', W / 2, 30);
+        this.noGlow(ctx);
         ctx.fillStyle = 'rgba(0,0,0,0.55)';
         ctx.fillRect(40, 46, W - 80, 8);
-        this.glow(ctx, '#ff3b3b', 10);
-        ctx.fillStyle = '#ff3b3b';
+        this.glow(ctx, bcol, 10);
+        ctx.fillStyle = bcol;
         ctx.fillRect(40, 46, (W - 80) * frac, 8);
         this.noGlow(ctx);
       }
@@ -1102,29 +1229,69 @@
     drawMenu(ctx, g) {
       ctx.save();
       ctx.textAlign = 'center';
-      const pulse = 0.7 + 0.3 * Math.sin(g.time * 3);
+      const T = g.time;
+      const horizon = H * 0.74;
 
-      this.glow(ctx, '#4df3ff', 30);
-      ctx.fillStyle = '#eaffff';
-      ctx.font = 'bold 52px monospace';
-      ctx.fillText('NEON', W / 2, H * 0.3);
-      this.glow(ctx, '#ff4df0', 30);
-      ctx.fillStyle = '#ffd6f8';
-      ctx.fillText('VOID', W / 2, H * 0.3 + 56);
+      // --- synthwave sun (sits on the horizon, grid below) ---
+      const sunY = horizon - 28, sunR = 54;
+      ctx.save();
+      ctx.beginPath(); ctx.arc(W / 2, sunY, sunR, 0, TAU); ctx.clip();
+      const sg = ctx.createLinearGradient(0, sunY - sunR, 0, sunY + sunR);
+      sg.addColorStop(0, '#ffe98a'); sg.addColorStop(0.5, '#ff9b4d'); sg.addColorStop(1, '#ff4df0');
+      ctx.fillStyle = sg; ctx.fillRect(W / 2 - sunR, sunY - sunR, sunR * 2, sunR * 2);
+      ctx.fillStyle = '#06040f';
+      for (let i = 0; i < 7; i++) { const yy = sunY + 6 + i * 7; ctx.fillRect(W / 2 - sunR, yy, sunR * 2, Math.min(5, 2 + i)); }
+      ctx.restore();
+      this.glow(ctx, '#ff7b4d', 26);
+      ctx.strokeStyle = 'rgba(255,155,90,0.5)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(W / 2, sunY, sunR, 0, TAU); ctx.stroke();
       this.noGlow(ctx);
 
-      ctx.font = '13px monospace';
-      ctx.fillStyle = 'rgba(180,220,255,0.85)';
-      ctx.fillText('ARROWS / WASD — move      SPACE — fire', W / 2, H * 0.52);
-      ctx.fillText('X — bomb      P — pause', W / 2, H * 0.52 + 22);
-      ctx.fillText('grab chips dropped by enemies to upgrade', W / 2, H * 0.52 + 52);
+      // --- perspective grid ---
+      ctx.strokeStyle = 'rgba(255,77,240,0.5)'; ctx.lineWidth = 1;
+      const scroll = (T * 0.4) % 1;
+      for (let i = 0; i < 16; i++) {
+        const f = (i + scroll) / 16;
+        const y = horizon + f * f * (H - horizon);
+        ctx.globalAlpha = clamp(0.55 * (1 - f) + 0.05, 0, 0.6);
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      }
+      ctx.globalAlpha = 0.3;
+      for (let i = -7; i <= 7; i++) { ctx.beginPath(); ctx.moveTo(W / 2 + i * 9, horizon); ctx.lineTo(W / 2 + i * 72, H); ctx.stroke(); }
+      ctx.globalAlpha = 1;
 
-      ctx.globalAlpha = pulse;
-      this.glow(ctx, '#7dff4d', 14);
-      ctx.fillStyle = '#c8ffb0';
+      // --- title: chromatic glow + bob ---
+      const ty = H * 0.24 + Math.sin(T * 1.6) * 4;
+      ctx.font = 'bold 58px monospace';
+      const chroma = (txt, y2, mainGlow, mainCol) => {
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = '#00e5ff'; ctx.fillText(txt, W / 2 - 3, y2);
+        ctx.fillStyle = '#ff2fd0'; ctx.fillText(txt, W / 2 + 3, y2);
+        this.glow(ctx, mainGlow, 26); ctx.globalAlpha = 1;
+        ctx.fillStyle = mainCol; ctx.fillText(txt, W / 2, y2); this.noGlow(ctx);
+      };
+      chroma('NEON', ty, '#4df3ff', '#eaffff');
+      chroma('VOID', ty + 56, '#ff4df0', '#ffe0fb');
+
+      // tagline + hi-score
+      ctx.font = 'bold 12px monospace';
+      this.glow(ctx, '#ffd25a', 8); ctx.fillStyle = '#ffd98a';
+      ctx.fillText('10 STAGES · 10 DREADNOUGHTS · ONE PILOT', W / 2, ty + 90);
+      this.noGlow(ctx);
+      ctx.font = '12px monospace'; ctx.fillStyle = 'rgba(180,220,255,0.75)';
+      ctx.fillText('HI-SCORE  ' + String(g.hiscore).padStart(7, '0'), W / 2, ty + 114);
+
+      // controls (kept above the sun so nothing overlaps)
+      ctx.fillStyle = 'rgba(175,205,240,0.6)'; ctx.font = '11px monospace';
+      ctx.fillText('MOVE  WASD / ARROWS      FIRE  SPACE      BOMB  X', W / 2, 350);
+      ctx.fillText('collect chips to level up · beat a boss to advance', W / 2, 368);
+
+      // blinking prompt
+      ctx.globalAlpha = 0.5 + 0.5 * Math.sin(T * 5);
+      this.glow(ctx, '#7dff4d', 16); ctx.fillStyle = '#c8ffb0';
       ctx.font = 'bold 20px monospace';
-      ctx.fillText('PRESS SPACE TO LAUNCH', W / 2, H * 0.74);
-      this.noGlow(ctx);
+      ctx.fillText('PRESS SPACE TO LAUNCH', W / 2, 410);
+      this.noGlow(ctx); ctx.globalAlpha = 1;
       ctx.restore();
     },
 
@@ -1146,7 +1313,7 @@
       ctx.fillStyle = 'rgba(180,220,255,0.8)';
       ctx.font = '14px monospace';
       ctx.fillText('BEST   ' + g.hiscore + (g.score >= g.hiscore && g.score > 0 ? '  ★ NEW!' : ''), W / 2, H * 0.46 + 26);
-      ctx.fillText('WAVE ' + g.wave + '   ·   ' + g.kills + ' KILLS', W / 2, H * 0.46 + 50);
+      ctx.fillText('STAGE ' + g.stage + '   ·   ' + g.kills + ' KILLS', W / 2, H * 0.46 + 50);
 
       if (g.overT > 1) {
         ctx.globalAlpha = 0.7 + 0.3 * Math.sin(g.overT * 4);
@@ -1222,6 +1389,70 @@
         case 'start': this.tone(392, 0.1, 'square', 0.06); this.tone(523, 0.1, 'square', 0.06, 1, 0.09); this.tone(659, 0.1, 'square', 0.06, 1, 0.18); this.tone(784, 0.2, 'square', 0.07, 1, 0.27); break;
       }
     }
+
+    // ---------- procedural music (arcade / synthwave loop) ----------
+    _mnote(freq, when, dur, type, vol, glide) {
+      if (!this.ctx || this.muted) return;
+      const o = this.ctx.createOscillator(), gn = this.ctx.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq, when);
+      if (glide) o.frequency.exponentialRampToValueAtTime(Math.max(30, glide), when + dur);
+      gn.gain.setValueAtTime(0.0001, when);
+      gn.gain.exponentialRampToValueAtTime(vol, when + 0.012);
+      gn.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+      o.connect(gn); gn.connect(this._mgain);
+      o.start(when); o.stop(when + dur + 0.03);
+    }
+    _mkick(when) {
+      if (!this.ctx || this.muted) return;
+      const o = this.ctx.createOscillator(), gn = this.ctx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(140, when); o.frequency.exponentialRampToValueAtTime(45, when + 0.12);
+      gn.gain.setValueAtTime(0.26, when); gn.gain.exponentialRampToValueAtTime(0.0001, when + 0.16);
+      o.connect(gn); gn.connect(this._mgain); o.start(when); o.stop(when + 0.18);
+    }
+    _mhat(when, vol) {
+      if (!this.ctx || this.muted) return;
+      const n = Math.floor(this.ctx.sampleRate * 0.03), buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate), ch = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      const src = this.ctx.createBufferSource(); src.buffer = buf;
+      const hp = this.ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7000;
+      const gn = this.ctx.createGain(); gn.gain.setValueAtTime(vol || 0.05, when); gn.gain.exponentialRampToValueAtTime(0.0001, when + 0.03);
+      src.connect(hp); hp.connect(gn); gn.connect(this._mgain); src.start(when);
+    }
+    startMusic(mode) {
+      this.ensure();
+      if (!this.ctx) return;
+      this.musicMode = mode;
+      if (!this._mgain) { this._mgain = this.ctx.createGain(); this._mgain.gain.value = 0.5; this._mgain.connect(this.ctx.destination); }
+      if (this.musicOn) return;      // already looping — mode swap takes effect next bar
+      this.musicOn = true; this._bar = 0;
+      this._barTime = this.ctx.currentTime + 0.12;
+      this._scheduleBar();
+    }
+    stopMusic() { this.musicOn = false; if (this._mtimer) { clearTimeout(this._mtimer); this._mtimer = null; } }
+    _scheduleBar() {
+      if (!this.musicOn || !this.ctx) return;
+      const game = this.musicMode === 'game';
+      const bpm = game ? 148 : 118;
+      const step = 60 / bpm / 4; // 16th notes
+      const prog = game
+        ? [[110, 1], [97.999, 0], [87.307, 0], [82.407, 1]]   // Am · G · F · E(min)
+        : [[110, 1], [87.307, 0], [130.813, 0], [97.999, 0]]; // Am · F · C · G
+      const ch = prog[this._bar % prog.length], root = ch[0], min = ch[1];
+      const third = root * (min ? 1.18921 : 1.259921), fifth = root * 1.498307;
+      const arp = [root * 2, third * 2, fifth * 2, third * 2, root * 2, fifth * 2, third * 4, fifth * 2];
+      const t0 = this._barTime;
+      for (let s = 0; s < 16; s++) {
+        const when = t0 + s * step;
+        if (s % 4 === 0) { this._mnote(root, when, step * 3.4, 'sawtooth', 0.14, root * 0.98); this._mkick(when); }
+        if (s % 2 === 0) this._mnote(arp[(s / 2) % arp.length], when, step * 1.5, 'square', game ? 0.06 : 0.05);
+        this._mhat(when, s % 2 ? 0.05 : 0.03);
+        if (game && s % 8 === 4) this._mnote(root * 3, when, step * 2, 'triangle', 0.05);
+      }
+      if (!game) { const mel = [fifth * 4, root * 4, third * 4, fifth * 4]; this._mnote(mel[this._bar % mel.length], t0 + step * 8, step * 6, 'triangle', 0.06); }
+      this._bar++; this._barTime += step * 16;
+      const aheadMs = (this._barTime - this.ctx.currentTime) * 1000 - 80;
+      this._mtimer = setTimeout(() => this._scheduleBar(), Math.max(15, aheadMs));
+    }
   }
 
   // ============================================================
@@ -1242,7 +1473,7 @@
     });
 
     const input = { left: false, right: false, up: false, down: false, fire: false, bomb: false };
-    let paused = false;
+    let paused = false, musicState = null;
 
     const keymap = {
       ArrowLeft: 'left', KeyA: 'left',
@@ -1277,6 +1508,8 @@
       if (k) { input[k] = false; ev.preventDefault(); }
     });
     window.addEventListener('blur', () => { for (const k in input) input[k] = false; });
+    // Unlock audio (and start menu music) on a click that doesn't launch the game.
+    canvas.addEventListener('pointerdown', () => sfx.ensure());
 
     // scale canvas to fit window while keeping aspect
     function fit() {
@@ -1292,6 +1525,11 @@
       let dt = Math.min(0.033, (now - last) / 1000);
       last = now;
       if (!paused) game.update(dt, input);
+      // Arcade music follows game state once a gesture has unlocked audio.
+      if (sfx.ctx && sfx.ctx.state === 'running') {
+        const ms = game.state === 'play' ? 'game' : 'menu';
+        if (ms !== musicState) { musicState = ms; sfx.startMusic(ms); }
+      }
       Render.draw(ctx, game, paused ? 0 : dt);
       if (paused) {
         ctx.save();
@@ -1313,6 +1551,7 @@
     // expose for smoke tests
     window.__game = game;
     window.__input = input;
+    window.__sfx = sfx;
   }
 
   // exports
