@@ -734,7 +734,12 @@
       const roll = Math.random();
       let kind;
       if (roll < (generous ? 0.6 : 0.62)) {
-        kind = 'weapon:' + WEAPON_KEYS[randi(0, WEAPON_KEYS.length - 1)];
+        // Bias toward the current weapon so it levels at a steady pace; the rest
+        // are other-weapon chips — tactical switch opportunities you can take or avoid.
+        let w;
+        if (Math.random() < 0.55) w = this.player.weapon;
+        else { const others = WEAPON_KEYS.filter((k) => k !== this.player.weapon); w = others[randi(0, others.length - 1)]; }
+        kind = 'weapon:' + w;
       } else if (roll < 0.78) kind = 'heal';
       else if (roll < 0.9) kind = 'shield';
       else kind = 'bomb';
@@ -769,21 +774,29 @@
       this.sfx.play('collect'); // bright "grabbed it" chime on every pickup
       if (d.kind.startsWith('weapon:')) {
         const w = d.kind.slice(7);
-        p.weapon = w; // grab it — switching is free; you always keep progressing
         color = WEAPONS[w].color;
-        if (p.level < WEAPONS[w].maxLv) {
-          p.level++;
-          label = WEAPONS[w].name + ' LV' + p.level;
-          // level-up celebration: flash, shake, burst, rising chime
-          this.flash = Math.max(this.flash, 0.5);
-          this.shake = Math.max(this.shake, 7);
-          this.burst(p.x, p.y, 28, color);
-          this.burst(p.x, p.y, 10, '#ffffff');
-          this.floaters.push({ x: p.x, y: p.y - 44, text: 'LEVEL ' + p.level + '!', t: 1.0, color });
-          this.sfx.play('levelup', p.level);
+        if (w === p.weapon) {
+          // your weapon's chip → level it up (celebration)
+          if (p.level < WEAPONS[w].maxLv) {
+            p.level++;
+            label = WEAPONS[w].name + ' LV' + p.level;
+            this.flash = Math.max(this.flash, 0.5);
+            this.shake = Math.max(this.shake, 7);
+            this.burst(p.x, p.y, 28, color);
+            this.burst(p.x, p.y, 10, '#ffffff');
+            this.floaters.push({ x: p.x, y: p.y - 44, text: 'LEVEL ' + p.level + '!', t: 1.0, color });
+            this.sfx.play('levelup', p.level);
+          } else {
+            this.score += 500;
+            label = WEAPONS[w].name + ' MAX +500';
+            this.sfx.play('powerup');
+          }
         } else {
-          this.score += 500;
-          label = WEAPONS[w].name + ' MAX +500';
+          // a different weapon → switch to it (keep your level). A tactical
+          // commitment: grab it only if that weapon suits the moment.
+          p.weapon = w;
+          label = '▶ ' + WEAPONS[w].name + ' LV' + p.level;
+          this.burst(p.x, p.y, 14, color);
           this.sfx.play('powerup');
         }
       } else if (d.kind === 'heal') {
