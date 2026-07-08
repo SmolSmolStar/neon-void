@@ -63,6 +63,7 @@
       this.hiscore = opts.hiscore || 0;
       this.onHiscore = opts.onHiscore || function () {};
       this.onWin = opts.onWin || function () {};
+      this.haptic = opts.haptic || function () {}; // mobile vibration (no-op elsewhere)
       this.cleared = !!opts.cleared; // lifetime "beat all 10 stages" achievement
       this.state = 'menu'; // menu | play | over
       this.time = 0;
@@ -257,6 +258,7 @@
     useBomb() {
       const p = this.player;
       p.bombs--;
+      this.haptic([40, 30, 80]);
       this.shake = 18;
       this.flash = 1;
       this.hitstop = 0.06;
@@ -286,6 +288,7 @@
         this.shake = 8;
         this.sfx.play('shieldHit');
         this.burst(p.x, p.y, 14, '#4dc3ff');
+        this.haptic(25);
         return;
       }
       p.hp -= dmg;
@@ -296,12 +299,14 @@
       this.combo = 1;
       this.sfx.play('hurt');
       this.burst(p.x, p.y, 22, '#ff5a5a');
+      this.haptic(50);
       if (p.hp <= 0) this.killPlayer();
     }
 
     killPlayer() {
       const p = this.player;
       p.alive = false;
+      this.haptic([90, 50, 160]);
       this.shake = 26;
       this.flash = 1;
       this.sfx.play('die');
@@ -678,6 +683,7 @@
         this.wave = 1;
         this.flash = 1;
         this.shake = 30;
+        this.haptic([25, 30, 25, 30, 70]);
         if (this.stage > STAGES && !this.won) {
           // Cleared all stages — big victory flourish (endless play continues).
           this.won = true;
@@ -1587,10 +1593,12 @@
     });
 
     const input = { left: false, right: false, up: false, down: false, fire: false, bomb: false, dragActive: false, tx: W / 2, ty: H - 90 };
-    let paused = false, musicState = null, audioUnlocked = false, musicVol = 0.5;
+    let paused = false, musicState = null, audioUnlocked = false, musicVol = 0.5, orientationBlocked = false;
     const isTouch = (typeof matchMedia !== 'undefined' && matchMedia('(hover: none) and (pointer: coarse)').matches) || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     game.audioReady = false;
     game.isTouch = isTouch;
+    // Haptics: short vibration on hits/bombs (mobile only; no-op where unsupported, e.g. iOS).
+    game.haptic = (pat) => { try { if (isTouch && navigator.vibrate) navigator.vibrate(pat); } catch (e) {} };
     // Browsers block autoplay: the first gesture "powers on" audio + menu music.
     const unlock = () => { if (audioUnlocked) return; audioUnlocked = true; game.audioReady = true; sfx.ensure(); };
 
@@ -1680,11 +1688,23 @@
     window.addEventListener('resize', fit);
     fit();
 
+    // Rotate-to-portrait: on a phone held sideways, freeze the game (a CSS overlay
+    // prompts the player to rotate back).
+    const rotateMQ = (typeof matchMedia !== 'undefined') ? matchMedia('(hover: none) and (pointer: coarse) and (orientation: landscape)') : null;
+    function checkOrientation() {
+      orientationBlocked = !!(rotateMQ && rotateMQ.matches);
+      game.orientationBlocked = orientationBlocked;
+      if (orientationBlocked) { for (const k in input) if (input[k] === true) input[k] = false; input.dragActive = false; }
+    }
+    if (rotateMQ) { rotateMQ.addEventListener ? rotateMQ.addEventListener('change', checkOrientation) : rotateMQ.addListener(checkOrientation); }
+    window.addEventListener('resize', checkOrientation);
+    checkOrientation();
+
     let last = performance.now();
     function frame(now) {
       let dt = Math.min(0.033, (now - last) / 1000);
       last = now;
-      if (!paused) game.update(dt, input);
+      if (!paused && !orientationBlocked) game.update(dt, input);
       // Arcade music follows game state once a gesture has unlocked audio.
       // 'play' uses the driving track; menu + results use the slower menu track,
       // ducked to a quieter volume on the results/leaderboard screen.

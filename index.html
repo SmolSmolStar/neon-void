@@ -35,13 +35,25 @@
   }
   #nv-bomb-btn:active { background: radial-gradient(circle at 50% 40%, rgba(255,184,77,0.5), rgba(255,140,60,0.2)); }
   @media (hover: none) and (pointer: coarse) { #nv-bomb-btn { display: flex; } }
+  /* Rotate-to-portrait hint (touch + landscape only). */
+  #nv-rotate {
+    position: fixed; inset: 0; z-index: 90; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    background: #05030d; color: #cfe9ff; font-family: monospace; text-align: center; padding: 20px;
+  }
+  #nv-rotate .ic { font-size: 60px; color: #4df3ff; text-shadow: 0 0 20px rgba(77,243,255,0.6); animation: nv-rot 2.2s ease-in-out infinite; }
+  #nv-rotate .t1 { font-size: 16px; font-weight: 700; letter-spacing: 0.14em; color: #eaffff; }
+  #nv-rotate .t2 { font-size: 11px; letter-spacing: 0.12em; color: #8fb2cf; }
+  @keyframes nv-rot { 0%,45%{transform:rotate(0)} 70%,100%{transform:rotate(-90deg)} }
+  @media (hover: none) and (pointer: coarse) and (orientation: landscape) { #nv-rotate { display: flex; } }
 </style>
 </head>
 <body>
 <canvas id="game" width="480" height="720"></canvas>
 <div id="nv-bomb-btn" aria-label="bomb">✸</div>
+<div id="nv-rotate"><div class="ic">↻</div><div class="t1">ROTATE YOUR DEVICE</div><div class="t2">NEON VOID plays in portrait</div></div>
 <!-- ?v bumped on each deploy so browsers never serve a stale build -->
-<script src="game.js?v=6"></script>
-<script src="leaderboard.js?v=6"></script>
+<script src="game.js?v=7"></script>
+<script src="leaderboard.js?v=7"></script>
 </body>
 </html>
