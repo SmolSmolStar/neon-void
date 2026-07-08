@@ -794,7 +794,7 @@
         // there's real time to kite/reposition the ones you don't want before
         // they give up. Never relentless.
         d.magT = d.magT || 0;
-        if (p.alive && d.magT < 2.5 && dist2(d.x, d.y, p.x, p.y) < 120 * 120) {
+        if (p.alive && d.magT < 1.8 && dist2(d.x, d.y, p.x, p.y) < 120 * 120) {
           d.magT += dt;
           const a = Math.atan2(p.y - d.y, p.x - d.x);
           d.x += Math.cos(a) * 260 * dt;
