@@ -1642,7 +1642,7 @@
       if (sfx.ctx && sfx.ctx.state === 'running') {
         const ms = game.state === 'play' ? 'game' : 'menu';
         if (ms !== musicState) { musicState = ms; sfx.startMusic(ms); }
-        const vol = game.state === 'over' ? 0.16 : 0.5;
+        const vol = game.state === 'over' ? 0.176 : 0.5; // results screen ducked (10% louder than before)
         if (vol !== musicVol) { musicVol = vol; sfx.setMusicVolume(vol); }
       }
       Render.draw(ctx, game, paused ? 0 : dt);
