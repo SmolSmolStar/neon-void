@@ -48,20 +48,9 @@
       })
       .catch(function () { hasWave = false; return false; });
   }
-  // Start of the current week (Monday 00:00 UTC) — the board resets weekly by
-  // only showing scores newer than this (old scores are kept, just not shown).
-  function weekStartISO() {
-    var now = new Date();
-    var diff = (now.getUTCDay() + 6) % 7; // days since Monday
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff, 0, 0, 0)).toISOString();
-  }
-  function weekResetsInDays() {
-    var now = new Date();
-    var diff = (now.getUTCDay() + 6) % 7;
-    var nextMon = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff + 7, 0, 0, 0);
-    return Math.max(1, Math.ceil((nextMon - now.getTime()) / 86400000));
-  }
-  // Keep only each pilot's best row (rows arrive sorted by the board's key).
+  // All-time board (weekly reset disabled by request — high scores are kept
+  // forever). Keep only each pilot's best row (rows arrive sorted by the
+  // board's key).
   function dedupeByName(rows) {
     var seen = {}, out = [];
     for (var i = 0; i < rows.length; i++) {
@@ -70,13 +59,13 @@
     }
     return out;
   }
-  // mode: 'week' = top score this week; 'stage' = furthest stage this week.
+  // mode: 'week' = top score board (all-time); 'stage' = furthest stage board.
   function fetchBoard(mode) {
     if (!configured) return Promise.reject(new Error('not configured'));
     var sel = 'name,score,created_at' + (hasWave ? ',wave' : '');
     var order = (mode === 'stage' && hasWave) ? '&order=wave.desc&order=score.desc' : '&order=score.desc&order=created_at.asc';
     var q = CFG.url + '/rest/v1/scores?game=eq.' + encodeURIComponent(CFG.game)
-      + '&select=' + sel + '&created_at=gte.' + encodeURIComponent(weekStartISO()) + order + '&limit=100';
+      + '&select=' + sel + order + '&limit=200';
     return fetch(q, { headers: headers() }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (rows) { return dedupeByName(rows); });
   }
@@ -318,7 +307,7 @@
   function switchBoard(mode) {
     boardMode = mode;
     if (lbEl.tabWeek) { lbEl.tabWeek.classList.toggle('on', mode === 'week'); lbEl.tabStage.classList.toggle('on', mode === 'stage'); }
-    if (lbEl.sub) lbEl.sub.textContent = mode === 'stage' ? 'NEON VOID · FURTHEST STAGE' : 'NEON VOID · THIS WEEK';
+    if (lbEl.sub) lbEl.sub.textContent = mode === 'stage' ? 'NEON VOID · FURTHEST STAGE' : 'NEON VOID · ALL-TIME';
     refresh();
   }
 
@@ -326,9 +315,9 @@
     var overlay = h('div'); overlay.id = 'nv-overlay';
     var card = h('aside'); card.id = 'nv-lb';
     card.appendChild(h('h2', null, 'TOP PILOTS'));
-    lbEl.sub = h('div', 'sub', 'NEON VOID · THIS WEEK'); card.appendChild(lbEl.sub);
+    lbEl.sub = h('div', 'sub', 'NEON VOID · ALL-TIME'); card.appendChild(lbEl.sub);
     var tabs = h('div', 'tabs');
-    lbEl.tabWeek = h('button', 'tab on', 'THIS WEEK');
+    lbEl.tabWeek = h('button', 'tab on', 'TOP SCORES');
     lbEl.tabStage = h('button', 'tab', 'BY STAGE');
     lbEl.tabWeek.addEventListener('click', function () { switchBoard('week'); });
     lbEl.tabStage.addEventListener('click', function () { switchBoard('stage'); });
@@ -443,9 +432,7 @@
     lbEl.list.innerHTML = '';
     var me = getName().toLowerCase();
     if (lbEl.weeknote) {
-      lbEl.weeknote.textContent = (boardMode === 'stage' && !hasWave)
-        ? 'stage tracking off — run the DB migration'
-        : 'weekly board · resets in ' + weekResetsInDays() + ' day' + (weekResetsInDays() === 1 ? '' : 's');
+      lbEl.weeknote.textContent = (boardMode === 'stage' && !hasWave) ? 'stage tracking off — run the DB migration' : 'all-time board · best run per pilot';
     }
     if (!display.length) { lbEl.list.appendChild(h('div', 'empty', configured ? 'no runs this week — be the first!' : 'leaderboard offline')); return; }
     display.forEach(function (r, i) {
@@ -491,14 +478,14 @@
       highlightKey = name + '|' + score; setStatus('saved · ' + score.toLocaleString() + ' pts', 'ok');
       // Show this week's score board with the player's placement.
       boardMode = 'week';
-      if (lbEl.tabWeek) { lbEl.tabWeek.classList.add('on'); lbEl.tabStage.classList.remove('on'); lbEl.sub.textContent = 'NEON VOID · THIS WEEK'; }
+      if (lbEl.tabWeek) { lbEl.tabWeek.classList.add('on'); lbEl.tabStage.classList.remove('on'); lbEl.sub.textContent = 'NEON VOID · ALL-TIME'; }
       return Promise.all([refresh(), getPlacement(name, score)]);
     }).then(function (res) {
       var pl = res && res[1];
       // Only a new personal best earns a placement banner; lower runs save quietly.
       if (pl && pl.isPB) {
         showBanner(pl.rank, pl.total, score, wave);
-        if (pl.rank === 1) { neonConfetti(); try { if (window.__sfx && window.__sfx.play) window.__sfx.play('fanfare'); } catch (e) {} setStatus('★ TOP PILOT — #1 THIS WEEK! ★', 'ok'); }
+        if (pl.rank === 1) { neonConfetti(); try { if (window.__sfx && window.__sfx.play) window.__sfx.play('fanfare'); } catch (e) {} setStatus('★ TOP PILOT — #1 ALL-TIME! ★', 'ok'); }
       }
     })
       .catch(function (err) { setStatus('save failed — ' + (err && err.message ? err.message.slice(0, 40) : 'try again'), 'err'); })

@@ -741,7 +741,7 @@
           this.burst(W / 2, H * 0.4, 90, '#ffd25a');
           this.burst(W / 2, H * 0.4, 40, '#ffffff');
         } else {
-          this.announce('STAGE ' + this.stage);
+          this.announce((this.stage > STAGES ? '∞ ENDLESS · STAGE ' : 'STAGE ') + this.stage);
         }
         // shower of drops as a reward
         for (let i = 0; i < 5; i++) this.spawnDrop(e.x + rand(-60, 60), e.y + rand(-30, 30), true);
@@ -1387,7 +1387,8 @@
         ctx.textAlign = 'right';
         ctx.font = '12px monospace';
         ctx.fillStyle = 'rgba(160,200,255,0.7)';
-        ctx.fillText(g.bossActive ? 'STAGE ' + g.stage + ' · BOSS' : 'STAGE ' + g.stage + ' · ' + g.wave + '/' + 5, W - 12, 12);
+        const stg = (g.stage > 10 ? '∞ ENDLESS S' : 'STAGE ') + g.stage;
+        ctx.fillText(g.bossActive ? stg + ' · BOSS' : stg + ' · ' + g.wave + '/' + 5, W - 12, 12);
 
         // hull hearts — labelled, filled = bright, empty slots outlined so it
         // is obvious how much health you have (and how many you can still gain).
@@ -1499,6 +1500,10 @@
         ctx.fillStyle = 'rgba(200,230,255,0.85)';
         ctx.fillText('YOU DESTROYED ALL 10 DREADNOUGHTS', W / 2, H * 0.22 + 58);
         ctx.fillText('THE VOID IS YOURS, PILOT', W / 2, H * 0.22 + 76);
+        this.glow(ctx, '#ff4df0', 10);
+        ctx.fillStyle = '#ffd6f8';
+        ctx.font = 'bold 13px monospace';
+        ctx.fillText('∞ ENDLESS MODE BEGINS — GO FOR THE RECORD ∞', W / 2, H * 0.22 + 102);
         this.noGlow(ctx);
         ctx.restore();
       }
@@ -1739,23 +1744,28 @@
     setMusicVolume(v) { if (this._mgain && this.ctx) this._mgain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.25); }
     _scheduleBar() {
       if (!this.musicOn || !this.ctx) return;
-      const game = this.musicMode === 'game';
-      const bpm = game ? 148 : 118;
+      const boss = this.musicMode === 'boss';   // final-boss variant: same voices, more menace
+      const game = this.musicMode === 'game' || boss;
+      const bpm = boss ? 172 : game ? 148 : 118;
       const step = 60 / bpm / 4; // 16th notes
-      const prog = game
-        ? [[110, 1], [97.999, 0], [87.307, 0], [82.407, 1]]   // Am · G · F · E(min)
-        : [[110, 1], [87.307, 0], [130.813, 0], [97.999, 0]]; // Am · F · C · G
+      const prog = boss
+        ? [[110, 1], [116.541, 0], [110, 1], [82.407, 0]]     // Am · B♭ · Am · E — urgent, Neapolitan dread
+        : game
+          ? [[110, 1], [97.999, 0], [87.307, 0], [82.407, 1]]   // Am · G · F · E(min)
+          : [[110, 1], [87.307, 0], [130.813, 0], [97.999, 0]]; // Am · F · C · G
       const ch = prog[this._bar % prog.length], root = ch[0], min = ch[1];
       const third = root * (min ? 1.18921 : 1.259921), fifth = root * 1.498307;
       const arp = [root * 2, third * 2, fifth * 2, third * 2, root * 2, fifth * 2, third * 4, fifth * 2];
       const t0 = this._barTime;
       for (let s = 0; s < 16; s++) {
         const when = t0 + s * step;
-        if (s % 4 === 0) { this._mnote(root, when, step * 3.4, 'sawtooth', 0.14, root * 0.98); this._mkick(when); }
-        if (s % 2 === 0) this._mnote(arp[(s / 2) % arp.length], when, step * 1.5, 'square', game ? 0.06 : 0.05);
-        this._mhat(when, s % 2 ? 0.05 : 0.03);
-        if (game && s % 8 === 4) this._mnote(root * 3, when, step * 2, 'triangle', 0.05);
+        if (s % 4 === 0) { this._mnote(root, when, step * 3.4, 'sawtooth', boss ? 0.16 : 0.14, root * 0.98); this._mkick(when); }
+        if (boss && s % 4 === 2) this._mkick(when); // double-time kick — heartbeat under pressure
+        if (boss ? true : s % 2 === 0) this._mnote(arp[(boss ? s : s / 2) % arp.length], when, step * (boss ? 0.9 : 1.5), 'square', boss ? 0.055 : game ? 0.06 : 0.05);
+        this._mhat(when, s % 2 ? (boss ? 0.07 : 0.05) : 0.03);
+        if (game && !boss && s % 8 === 4) this._mnote(root * 3, when, step * 2, 'triangle', 0.05);
       }
+      if (boss) this._mnote(root * 4, t0, step * 10, 'sawtooth', 0.045, root * 2.9); // descending siren wail each bar
       if (!game) { const mel = [fifth * 4, root * 4, third * 4, fifth * 4]; this._mnote(mel[this._bar % mel.length], t0 + step * 8, step * 6, 'triangle', 0.06); }
       this._bar++; this._barTime += step * 16;
       const aheadMs = (this._barTime - this.ctx.currentTime) * 1000 - 80;
@@ -1807,18 +1817,22 @@
       if (ev.code === 'KeyP' && game.state === 'play') { paused = !paused; return; }
       if (ev.code === 'KeyM') { sfx.muted = !sfx.muted; return; }
       // --- test cheats ---
-      if (ev.code === 'KeyG') {
-        game.god = !game.god;
-        game.usedCheats = true; // cheat-tainted run — leaderboard will refuse it
-        game.floaters.push({ x: W / 2, y: H * 0.45, text: game.god ? 'GOD MODE ON' : 'GOD MODE OFF', t: 1.2, color: '#ffd25a' });
-        return;
-      }
-      if (game.state === 'play') {
-        const wkeys = { Digit1: 'blaster', Digit2: 'spread', Digit3: 'laser', Digit4: 'missile' };
-        if (wkeys[ev.code]) { game.player.weapon = wkeys[ev.code]; game.usedCheats = true; return; }
-        if (ev.code === 'KeyU') { game.player.level = Math.min(6, game.player.level + 1); game.usedCheats = true; return; }
-        if (ev.code === 'KeyB' && !game.bossActive) { game.spawnBoss(); game.usedCheats = true; return; }
-        if (ev.code === 'KeyH') { game.player.hp = game.player.maxHp; game.player.shield = 3; game.player.bombs = 5; game.usedCheats = true; return; }
+      // Cheats exist ONLY on the private test page (window.NEONVOID_TEST);
+      // on the live site these keys do nothing at all.
+      if (window.NEONVOID_TEST) {
+        if (ev.code === 'KeyG') {
+          game.god = !game.god;
+          game.usedCheats = true; // tainted — leaderboard refuses it (belt & braces)
+          game.floaters.push({ x: W / 2, y: H * 0.45, text: game.god ? 'GOD MODE ON' : 'GOD MODE OFF', t: 1.2, color: '#ffd25a' });
+          return;
+        }
+        if (game.state === 'play') {
+          const wkeys = { Digit1: 'blaster', Digit2: 'spread', Digit3: 'laser', Digit4: 'missile' };
+          if (wkeys[ev.code]) { game.player.weapon = wkeys[ev.code]; game.usedCheats = true; return; }
+          if (ev.code === 'KeyU') { game.player.level = Math.min(6, game.player.level + 1); game.usedCheats = true; return; }
+          if (ev.code === 'KeyB' && !game.bossActive) { game.spawnBoss(); game.usedCheats = true; return; }
+          if (ev.code === 'KeyH') { game.player.hp = game.player.maxHp; game.player.shield = 3; game.player.bombs = 5; game.usedCheats = true; return; }
+        }
       }
       const k = keymap[ev.code];
       if (k) { input[k] = true; ev.preventDefault(); }
@@ -1898,8 +1912,11 @@
       // 'play' uses the driving track; menu + results use the slower menu track,
       // ducked to a quieter volume on the results/leaderboard screen.
       if (sfx.ctx && sfx.ctx.state === 'running') {
-        const ms = game.state === 'play' ? 'game' : 'menu';
-        if (ms !== musicState) { musicState = ms; sfx.startMusic(ms); }
+        // the final boss gets an urgent variant of the game track
+        const omegaUp = game.state === 'play' && game.bossActive &&
+          game.enemies.some((e) => e.type === 'boss' && e.cfg && e.cfg.final);
+        const ms = game.state === 'play' ? (omegaUp ? 'boss' : 'game') : 'menu';
+        if (ms !== musicState) { musicState = ms; sfx.musicMode = ms; sfx.startMusic(ms); }
         const vol = game.state === 'over' ? 0.176 : 0.5; // results screen ducked (10% louder than before)
         if (vol !== musicVol) { musicVol = vol; sfx.setMusicVolume(vol); }
       }
