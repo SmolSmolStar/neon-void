@@ -109,6 +109,7 @@
     { id: 'e:splitter', t: 'splitter', c: '#ff8cd2', nm: 'SPLITTER', nt: 'bursts into shards' },
     { id: 'e:shard', t: 'shard', c: '#ff8cd2', nm: 'SHARD', nt: 'splinter from a splitter' },
     { id: 'e:tank', t: 'tank', c: '#b98cff', nm: 'TANK', nt: 'armored, high HP' },
+    { id: 'e:mini', t: 'mini', c: '#ff6b6b', nm: 'MINI-DREADNOUGHT', nt: 'escort of the final boss' },
     { id: 'e:boss', t: 'boss', c: '#ff3b3b', nm: 'BOSS', nt: 'wave boss — massive HP' },
   ];
   var PICKUPS = [
@@ -144,7 +145,7 @@
     else if (type === 'splitter') { s = 0.72; x.save(); x.rotate(0.5); x.fillRect(-12 * s, -12 * s, 24 * s, 24 * s); x.fillStyle = '#7a2054'; x.fillRect(-5 * s, -5 * s, 10 * s, 10 * s); x.restore(); }
     else if (type === 'shard') { s = 1.35; x.beginPath(); x.moveTo(0, -9 * s); x.lineTo(6 * s, 5 * s); x.lineTo(-6 * s, 5 * s); x.closePath(); x.fill(); }
     else if (type === 'tank') { s = 0.54; x.beginPath(); for (k = 0; k < 8; k++) { a = (k / 8) * TAU + Math.PI / 8; x[k ? 'lineTo' : 'moveTo'](Math.cos(a) * 24 * s, Math.sin(a) * 24 * s); } x.closePath(); x.fill(); x.fillStyle = '#4a2a80'; x.beginPath(); x.arc(0, 0, 11 * s, 0, TAU); x.fill(); x.fillStyle = col; x.beginPath(); x.arc(0, 0, 5 * s, 0, TAU); x.fill(); }
-    else if (type === 'boss') { s = 0.24; x.beginPath(); x.moveTo(0, 46 * s); x.lineTo(-30 * s, 26 * s); x.lineTo(-52 * s, -4 * s); x.lineTo(-30 * s, -34 * s); x.lineTo(30 * s, -34 * s); x.lineTo(52 * s, -4 * s); x.lineTo(30 * s, 26 * s); x.closePath(); x.fill(); x.fillStyle = '#5a0f0f'; x.beginPath(); x.arc(0, 0, 22 * s, 0, TAU); x.fill(); x.fillStyle = '#ff8c4d'; x.beginPath(); x.arc(0, 0, 10 * s, 0, TAU); x.fill(); }
+    else if (type === 'boss' || type === 'mini') { s = type === 'mini' ? 0.17 : 0.24; x.beginPath(); x.moveTo(0, 46 * s); x.lineTo(-30 * s, 26 * s); x.lineTo(-52 * s, -4 * s); x.lineTo(-30 * s, -34 * s); x.lineTo(30 * s, -34 * s); x.lineTo(52 * s, -4 * s); x.lineTo(30 * s, 26 * s); x.closePath(); x.fill(); x.fillStyle = '#5a0f0f'; x.beginPath(); x.arc(0, 0, 22 * s, 0, TAU); x.fill(); x.fillStyle = '#ff8c4d'; x.beginPath(); x.arc(0, 0, 10 * s, 0, TAU); x.fill(); }
     x.restore();
   }
   function drawDropIcon(x, col, label) {

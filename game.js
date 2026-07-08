@@ -466,6 +466,16 @@
       }
     }
 
+    spawnMini(x) {
+      // a scaled-down dreadnought escort — modest HP, guaranteed drop
+      this.enemies.push({
+        type: 'mini', x, y: -40, r: 26,
+        hp: 340, maxHp: 340, color: '#ff6b6b', score: 2500, dropChance: 1,
+        t: rand(0, TAU), fireT: rand(1.4, 2.2), hitT: 0,
+        vx: 0, vy: 0, baseX: x, spd: 1, dir: Math.random() < 0.5 ? -1 : 1,
+      });
+    }
+
     spawnBoss() {
       this.bossActive = true;
       const cfg = BOSSES[(this.stage - 1) % STAGES];
@@ -516,6 +526,14 @@
             e.y += (46 + d * 7) * sp * dt;
             break;
           case 'boss': this.updateBoss(e, dt, d); break;
+          case 'mini':
+            if (e.y < 195) e.y += 85 * dt;
+            else {
+              e.x += e.dir * 70 * dt;
+              if (e.x < e.r + 8) { e.x = e.r + 8; e.dir = 1; }
+              if (e.x > W - e.r - 8) { e.x = W - e.r - 8; e.dir = -1; }
+            }
+            break;
         }
 
         // enemy shooting
@@ -556,6 +574,11 @@
           aimAt(0.06, bs * 1.1); aimAt(0.3, bs * 0.9);
           break;
         case 'boss': this.bossFire(e, d); break;
+        case 'mini':
+          e.fireT = rand(2.0, 3.0);
+          aimAt(0.06, bs * 0.95);
+          aimAt(0.32, bs * 0.85);
+          break;
       }
     }
 
@@ -601,6 +624,20 @@
       }
       if (cfg.final) e.y += 35; // keep the oversized final boss clear of the HP bar
       e.x = clamp(e.x, e.r + 4, W - e.r - 4);
+
+      // OMEGA phase reinforcements: escorts at 66% and 33% HP — intensity
+      // spikes with guaranteed drops, so the fight spices up but stays fair.
+      if (cfg.final) {
+        e.minis = e.minis || 0;
+        const hf2 = e.hp / e.maxHp;
+        if ((e.minis === 0 && hf2 < 0.66) || (e.minis === 2 && hf2 < 0.33)) {
+          this.spawnMini(clamp(e.x - 150, 40, W - 40));
+          this.spawnMini(clamp(e.x + 150, 40, W - 40));
+          e.minis += 2;
+          this.floaters.push({ x: W / 2, y: H * 0.4, text: '⚠ ESCORTS DEPLOYED ⚠', t: 1.5, color: '#ff8c5a' });
+          this.sfx.play('boss');
+        }
+      }
     }
 
     // Per-boss shooting patterns (data-driven by boss.cfg.phases).
@@ -747,6 +784,11 @@
         for (let i = 0; i < 5; i++) this.spawnDrop(e.x + rand(-60, 60), e.y + rand(-30, 30), true);
         // clear enemy bullets as reward
         this.ebullets.length = 0;
+      } else if (e.type === 'mini') {
+        // escorts drop supportive items only — a lifeline mid-boss-fight,
+        // never a weapon chip that baits you into switching off your build
+        const roll = Math.random();
+        this.drops.push({ x: e.x, y: e.y, vy: 60, kind: roll < 0.45 ? 'heal' : roll < 0.75 ? 'shield' : 'bomb', t: 0, r: 12 });
       } else if (Math.random() < e.dropChance || this.killsSinceDrop >= 6) {
         this.spawnDrop(e.x, e.y, false);
         this.killsSinceDrop = 0;
@@ -886,6 +928,22 @@
       // player bullets
       for (let i = this.bullets.length - 1; i >= 0; i--) {
         const b = this.bullets[i];
+        // proximity fuse: homing missiles that fail to connect (e.g. orbiting a
+        // teleporting boss) self-detonate after 3s, applying their splash
+        if (b.homing) {
+          b.age = (b.age || 0) + dt;
+          if (b.age > 3) {
+            if (b.splash) {
+              for (let k = this.enemies.length - 1; k >= 0; k--) {
+                const e2 = this.enemies[k];
+                if (e2.y > -e2.r && dist2(b.x, b.y, e2.x, e2.y) < b.splash * b.splash) this.damageEnemy(e2, b.dmg * 0.75);
+              }
+              this.burst(b.x, b.y, 8, '#ffb84d');
+            }
+            this.bullets.splice(i, 1);
+            continue;
+          }
+        }
         if (b.homing && this.enemies.length) {
           let best = null, bd = 1e12;
           for (const e of this.enemies) {
@@ -1214,6 +1272,21 @@
             ctx.fillStyle = flash ? '#fff' : e.color;
             ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.fill();
             break;
+          case 'mini': {
+            // a pocket dreadnought — same hull silhouette, half scale
+            ctx.rotate(Math.sin(e.t * 1.1) * 0.08);
+            const msc = e.r / 52;
+            ctx.scale(msc, msc);
+            ctx.beginPath();
+            ctx.moveTo(0, 46); ctx.lineTo(-30, 26); ctx.lineTo(-52, -4); ctx.lineTo(-30, -34);
+            ctx.lineTo(30, -34); ctx.lineTo(52, -4); ctx.lineTo(30, 26);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = flash ? '#fff' : '#5a0f0f';
+            ctx.beginPath(); ctx.arc(0, 0, 22, 0, TAU); ctx.fill();
+            ctx.fillStyle = flash ? '#fff' : '#ff8c4d';
+            ctx.beginPath(); ctx.arc(0, 0, 10 + Math.sin(e.t * 6) * 2, 0, TAU); ctx.fill();
+            break;
+          }
           case 'boss': {
             ctx.rotate(Math.sin(e.t * 0.7) * 0.06);
             // scale the artwork to the boss's radius (the final boss is much larger)
@@ -1258,8 +1331,8 @@
         this.noGlow(ctx);
         ctx.restore();
 
-        // health bar for tanks (boss uses the big top bar)
-        if (e.type === 'tank' && e.hp < e.maxHp) {
+        // health bar for tanks + minis (boss uses the big top bar)
+        if ((e.type === 'tank' || e.type === 'mini') && e.hp < e.maxHp) {
           const w = 40;
           const frac = clamp(e.hp / e.maxHp, 0, 1);
           ctx.fillStyle = 'rgba(0,0,0,0.5)';
