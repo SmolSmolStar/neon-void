@@ -98,6 +98,7 @@
       this.victoryT = 0;
       this._chip1 = null;      // last two weapon-chip types (anti-streak guard)
       this._chip2 = null;
+      this.usedCheats = false; // tainted runs never submit to the leaderboard
       this.shake = 0;
       this.hitstop = 0;
       this.flash = 0;
@@ -110,6 +111,7 @@
       this.state = 'play';
       this.stage = 1;
       this.wave = 1;
+      if (this.god) this.usedCheats = true; // god left on from a previous run
       this.announce('STAGE 1');
       this.sfx.play('start');
     }
@@ -1807,15 +1809,16 @@
       // --- test cheats ---
       if (ev.code === 'KeyG') {
         game.god = !game.god;
+        game.usedCheats = true; // cheat-tainted run — leaderboard will refuse it
         game.floaters.push({ x: W / 2, y: H * 0.45, text: game.god ? 'GOD MODE ON' : 'GOD MODE OFF', t: 1.2, color: '#ffd25a' });
         return;
       }
       if (game.state === 'play') {
         const wkeys = { Digit1: 'blaster', Digit2: 'spread', Digit3: 'laser', Digit4: 'missile' };
-        if (wkeys[ev.code]) { game.player.weapon = wkeys[ev.code]; return; }
-        if (ev.code === 'KeyU') { game.player.level = Math.min(6, game.player.level + 1); return; }
-        if (ev.code === 'KeyB' && !game.bossActive) { game.spawnBoss(); return; }
-        if (ev.code === 'KeyH') { game.player.hp = game.player.maxHp; game.player.shield = 3; game.player.bombs = 5; return; }
+        if (wkeys[ev.code]) { game.player.weapon = wkeys[ev.code]; game.usedCheats = true; return; }
+        if (ev.code === 'KeyU') { game.player.level = Math.min(6, game.player.level + 1); game.usedCheats = true; return; }
+        if (ev.code === 'KeyB' && !game.bossActive) { game.spawnBoss(); game.usedCheats = true; return; }
+        if (ev.code === 'KeyH') { game.player.hp = game.player.maxHp; game.player.shield = 3; game.player.bombs = 5; game.usedCheats = true; return; }
       }
       const k = keymap[ev.code];
       if (k) { input[k] = true; ev.preventDefault(); }

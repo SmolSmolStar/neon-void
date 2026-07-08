@@ -507,6 +507,7 @@
 
   function onManualSubmit() {
     var g = window.__game;
+    if (g && g.state === 'over' && g.usedCheats) { setStatus('test run (cheats used) — score not saved', 'err'); return; }
     if (g && g.state === 'over' && g.score > 0) return doSubmit(lbEl.input.value, g.score, g.stage, {});
     setName(lbEl.input.value.trim()); setStatus(lbEl.input.value.trim() ? 'handle saved' : '', 'ok');
   }
@@ -538,7 +539,8 @@
         if (g.state === 'over') {
           lbEl.banner.classList.add('hidden');
           var nm = getName();
-          if (nm && g.score > 0) doSubmit(nm, g.score, g.stage, { auto: true });
+          if (g.usedCheats) { setStatus('test run (cheats used) — score not saved', ''); refresh(); }
+          else if (nm && g.score > 0) doSubmit(nm, g.score, g.stage, { auto: true });
           else { if (g.score > 0) setStatus('enter a handle, then SAVE your ' + g.score.toLocaleString() + ' pt run', ''); refresh(); }
           showOverlay();
         } else {
