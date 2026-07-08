@@ -161,6 +161,9 @@
       '#nv-codex .cx.locked .nm{color:#6f8aa8;}#nv-codex .cx.locked .nt{color:#4a6076;}',
       '#nv-codex .cx .tag{margin-left:auto;font-size:8px;font-weight:700;letter-spacing:.1em;color:#04121c;background:#4df3ff;',
       'padding:2px 5px;border-radius:4px;box-shadow:0 0 10px rgba(77,243,255,.7);}',
+      '#nv-codex .cx .lv{margin-left:auto;font-size:8.5px;font-weight:700;letter-spacing:.04em;color:#08131c;background:#5affc8;padding:2px 6px;border-radius:4px;}',
+      '#nv-codex .cx.equipped{box-shadow:inset 0 0 0 1px rgba(90,255,200,.4);}',
+      '#nv-codex .cx.equipped .nm{color:#8affda;}',
       '@keyframes nvreveal{0%{background:rgba(77,243,255,.35)}100%{background:transparent}}',
       '#nv-codex .cx.reveal{animation:nvreveal 1.4s ease;}',
       '#nv-codex .scroll::-webkit-scrollbar{width:6px;}#nv-codex .scroll::-webkit-scrollbar-thumb{background:rgba(77,243,255,.25);border-radius:3px;}',
@@ -235,7 +238,16 @@
     txt.appendChild(h('div', 'nm', seen ? entry.nm : '???'));
     txt.appendChild(h('div', 'nt', seen ? entry.nt : 'undiscovered'));
     row.appendChild(txt);
-    if (revealing[entry.id]) row.appendChild(h('span', 'tag', 'NEW'));
+    // Round progress: equipped weapon level, and current bomb / shield counts.
+    var g = window.__game, right = null;
+    if (revealing[entry.id]) {
+      right = h('span', 'tag', 'NEW');
+    } else if (seen && !isEnemy && g && g.player && g.state === 'play') {
+      if (entry.id === 'p:' + g.player.weapon) { row.classList.add('equipped'); right = h('span', 'lv', 'LV ' + g.player.level); }
+      else if (entry.id === 'p:bomb' && g.player.bombs > 0) right = h('span', 'lv', '×' + g.player.bombs);
+      else if (entry.id === 'p:shield' && g.player.shield > 0) right = h('span', 'lv', '×' + g.player.shield);
+    }
+    if (right) row.appendChild(right);
     return row;
   }
 
@@ -364,13 +376,18 @@
     document.body.appendChild(overlay);
   }
 
-  var prevState = null;
+  var prevState = null, progressSig = '';
   function tick() {
     var g = window.__game;
     if (g) {
       // Living codex: reveal anything currently on the field.
       if (g.enemies) for (var i = 0; i < g.enemies.length; i++) discover('e:' + g.enemies[i].type);
       if (g.drops) for (var j = 0; j < g.drops.length; j++) { var id = dropKindToId(g.drops[j].kind); if (id) discover(id); }
+      // Keep the pickup levels/counts in the codex current.
+      if (g.player) {
+        var sig = g.player.weapon + ':' + g.player.level + ':' + g.player.bombs + ':' + g.player.shield + ':' + g.state;
+        if (sig !== progressSig) { progressSig = sig; renderCodex(); }
+      }
       // Leaderboard only at the end of a round.
       if (g.state !== prevState) {
         if (g.state === 'over') {

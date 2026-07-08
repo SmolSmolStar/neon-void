@@ -71,7 +71,7 @@
 
     reset() {
       this.player = {
-        x: W / 2, y: H - 90, r: 11, hp: 5, maxHp: 5,
+        x: W / 2, y: H - 90, r: 11, hp: 3, maxHp: 5, // start 3 hearts, heal up to 5
         shield: 0, inv: 0, fireCd: 0,
         weapon: 'blaster', level: 1,
         bombs: 3, alive: true, tilt: 0, engine: 0,
@@ -321,36 +321,21 @@
 
       this.spawnT -= dt;
       const d = this.difficulty();
-      // Cap concurrent hostiles so early stages never swarm the player.
-      const cap = 4 + this.stage * 2;
+      const cap = 6 + this.stage * 3;   // higher ceiling so later stages pressure
       if (this.spawnT <= 0 && this.enemies.length < cap) {
-        this.spawnT = Math.max(0.45, 1.5 - d * 0.07) * rand(0.75, 1.25);
-        this.spawnEnemy(d);
+        // Formations arrive larger and more often as stages advance; the 5th
+        // wave is a crescendo assault right before the boss.
+        const crescendo = this.wave >= WAVES_PER_STAGE ? 0.5 : 0;
+        this.spawnT = Math.max(1.1, 3.35 - this.stage * 0.16 - (this.wave - 1) * 0.1 - crescendo) * rand(0.85, 1.15);
+        this.spawnFormation(d);
       }
     }
 
-    spawnEnemy(d) {
-      // Progressive roster — new hostiles are introduced as stages advance,
-      // so each stage brings a fresh threat (classic shmup progression).
-      const roster = ['darter', 'drone'];
-      if (this.stage >= 2) roster.push('weaver');
-      if (this.stage >= 3) roster.push('splitter');
-      if (this.stage >= 4) roster.push('tank');
-      let type;
-      if (this.stage <= 1) {
-        type = Math.random() < 0.6 ? 'darter' : 'drone';
-      } else {
-        const weights = roster.map((tp) => tp === 'tank' ? 0.5 + this.stage * 0.07 : tp === 'splitter' ? 0.7 : tp === 'weaver' ? 1.0 : 1.4);
-        const tot = weights.reduce((a, b) => a + b, 0);
-        let acc = Math.random() * tot;
-        type = roster[0];
-        for (let i = 0; i < roster.length; i++) { acc -= weights[i]; if (acc <= 0) { type = roster[i]; break; } }
-      }
-
+    // Build one enemy at (x, y), scaled to difficulty d.
+    mkEnemy(type, x, y, d) {
       const t = ENEMY_TYPES[type];
-      const x = rand(40, W - 40);
       const e = {
-        type, x, y: -30, r: t.r,
+        type, x, y, r: t.r,
         hp: Math.ceil(t.hp * (0.85 + d * 0.24)), maxHp: 0,
         color: t.color, score: t.score, dropChance: t.drop,
         t: rand(0, TAU), fireT: rand(0.8, 2.4), hitT: 0,
@@ -358,6 +343,67 @@
       };
       e.maxHp = e.hp;
       this.enemies.push(e);
+      return e;
+    }
+
+    // Stage-weighted random enemy type (progressive roster).
+    pickType() {
+      if (this.stage <= 1) return Math.random() < 0.6 ? 'darter' : 'drone';
+      const roster = ['darter', 'drone', 'weaver'];
+      if (this.stage >= 3) roster.push('splitter');
+      if (this.stage >= 4) roster.push('tank');
+      const weights = roster.map((tp) => tp === 'tank' ? 0.5 + this.stage * 0.07 : tp === 'splitter' ? 0.7 : tp === 'weaver' ? 1.0 : 1.4);
+      const tot = weights.reduce((a, b) => a + b, 0);
+      let acc = Math.random() * tot;
+      for (let i = 0; i < roster.length; i++) { acc -= weights[i]; if (acc <= 0) return roster[i]; }
+      return roster[0];
+    }
+
+    // Back-compat single spawn (used by tests).
+    spawnEnemy(d) { this.mkEnemy(this.pickType(), rand(40, W - 40), -30, d); }
+
+    // Coordinated formations that grow + quicken with the stage.
+    spawnFormation(d) {
+      const s = this.stage;
+      const kinds = ['line', 'stream'];
+      if (s >= 2) kinds.push('vee', 'swarm');
+      if (s >= 3) kinds.push('flank', 'escort');
+      const kind = kinds[randi(0, kinds.length - 1)];
+      const basic = () => (s >= 2 && Math.random() < 0.5) ? 'weaver' : (Math.random() < 0.6 ? 'darter' : 'drone');
+      switch (kind) {
+        case 'line': {              // a row sweeping down together
+          const n = 2 + Math.floor(s / 2), type = basic();
+          for (let i = 0; i < n; i++) this.mkEnemy(type, 46 + (i + 0.5) * (W - 92) / n, -30, d);
+          break;
+        }
+        case 'stream': {            // a conga line pouring from one column
+          const n = 3 + Math.floor(s / 2), x = rand(70, W - 70), type = basic();
+          for (let i = 0; i < n; i++) this.mkEnemy(type, x, -30 - i * 46, d);
+          break;
+        }
+        case 'vee': {               // arrowhead formation
+          const n = 2 + Math.floor(s / 3);
+          this.mkEnemy('drone', W / 2, -30, d);
+          for (let i = 1; i <= n; i++) { this.mkEnemy('drone', W / 2 - i * 34, -30 - i * 24, d); this.mkEnemy('drone', W / 2 + i * 34, -30 - i * 24, d); }
+          break;
+        }
+        case 'flank': {             // pincer from both edges
+          const n = 2 + Math.floor(s / 3);
+          for (let i = 0; i < n; i++) { this.mkEnemy('weaver', 34, -30 - i * 42, d); this.mkEnemy('weaver', W - 34, -30 - i * 42, d); }
+          break;
+        }
+        case 'swarm': {             // a fast cloud of light enemies
+          const n = 4 + s;
+          for (let i = 0; i < n; i++) this.mkEnemy(Math.random() < 0.7 ? 'darter' : 'drone', rand(40, W - 40), -30 - rand(0, 130), d);
+          break;
+        }
+        case 'escort': {            // a tank shielded by drones, aimed at you
+          this.mkEnemy('tank', clamp(this.player.x + rand(-80, 80), 60, W - 60), -44, d);
+          const n = 2 + Math.floor(s / 3);
+          for (let i = 0; i < n; i++) this.mkEnemy('drone', rand(50, W - 50), -30 - i * 20, d);
+          break;
+        }
+      }
     }
 
     spawnShards(x, y, d) {
@@ -1172,17 +1218,27 @@
         ctx.fillStyle = 'rgba(160,200,255,0.7)';
         ctx.fillText(g.bossActive ? 'STAGE ' + g.stage + ' · BOSS' : 'STAGE ' + g.stage + ' · ' + g.wave + '/' + 5, W - 12, 12);
 
-        // hull pips
-        for (let i = 0; i < p.maxHp; i++) {
-          ctx.fillStyle = i < p.hp ? '#ff5a7a' : 'rgba(255,90,122,0.18)';
-          this.glow(ctx, '#ff5a7a', i < p.hp ? 8 : 0);
-          ctx.beginPath();
-          const hx = 20 + i * 20, hy = H - 24;
-          ctx.moveTo(hx, hy - 4); ctx.bezierCurveTo(hx + 8, hy - 12, hx + 16, hy - 2, hx, hy + 8);
-          ctx.bezierCurveTo(hx - 16, hy - 2, hx - 8, hy - 12, hx, hy - 4);
-          ctx.fill();
-        }
+        // hull hearts — labelled, filled = bright, empty slots outlined so it
+        // is obvious how much health you have (and how many you can still gain).
         this.noGlow(ctx);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        ctx.font = 'bold 9px monospace';
+        ctx.fillStyle = 'rgba(255,150,170,0.75)';
+        ctx.fillText('HULL', 14, H - 40);
+        for (let i = 0; i < p.maxHp; i++) {
+          const hx = 24 + i * 26, hy = H - 22, filled = i < p.hp;
+          ctx.beginPath();
+          ctx.moveTo(hx, hy - 5); ctx.bezierCurveTo(hx + 10, hy - 15, hx + 20, hy - 2, hx, hy + 9);
+          ctx.bezierCurveTo(hx - 20, hy - 2, hx - 10, hy - 15, hx, hy - 5);
+          if (filled) {
+            this.glow(ctx, '#ff5a7a', 10);
+            ctx.fillStyle = '#ff5a7a'; ctx.fill();
+            this.noGlow(ctx);
+          } else {
+            ctx.fillStyle = 'rgba(255,90,122,0.10)'; ctx.fill();
+            ctx.strokeStyle = 'rgba(255,120,150,0.45)'; ctx.lineWidth = 1; ctx.stroke();
+          }
+        }
         // bombs
         for (let i = 0; i < p.bombs; i++) {
           this.glow(ctx, '#ffb84d', 8);
@@ -1329,11 +1385,11 @@
       ctx.fillText('MOVE  WASD / ARROWS      FIRE  SPACE      BOMB  X', W / 2, 350);
       ctx.fillText('collect chips to level up · beat a boss to advance', W / 2, 368);
 
-      // blinking prompt
+      // blinking prompt — first press powers on (music), second launches
       ctx.globalAlpha = 0.5 + 0.5 * Math.sin(T * 5);
-      this.glow(ctx, '#7dff4d', 16); ctx.fillStyle = '#c8ffb0';
       ctx.font = 'bold 20px monospace';
-      ctx.fillText('PRESS SPACE TO LAUNCH', W / 2, 410);
+      if (g.audioReady) { this.glow(ctx, '#7dff4d', 16); ctx.fillStyle = '#c8ffb0'; ctx.fillText('PRESS SPACE TO LAUNCH', W / 2, 410); }
+      else { this.glow(ctx, '#ffd25a', 16); ctx.fillStyle = '#ffe98a'; ctx.fillText('◈ INSERT COIN ◈', W / 2, 410); }
       this.noGlow(ctx); ctx.globalAlpha = 1;
       ctx.restore();
     },
@@ -1473,6 +1529,7 @@
       this._scheduleBar();
     }
     stopMusic() { this.musicOn = false; if (this._mtimer) { clearTimeout(this._mtimer); this._mtimer = null; } }
+    setMusicVolume(v) { if (this._mgain && this.ctx) this._mgain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.25); }
     _scheduleBar() {
       if (!this.musicOn || !this.ctx) return;
       const game = this.musicMode === 'game';
@@ -1521,7 +1578,10 @@
     });
 
     const input = { left: false, right: false, up: false, down: false, fire: false, bomb: false };
-    let paused = false, musicState = null;
+    let paused = false, musicState = null, audioUnlocked = false, musicVol = 0.5;
+    game.audioReady = false;
+    // Browsers block autoplay: the first gesture "powers on" audio + menu music.
+    const unlock = () => { if (audioUnlocked) return; audioUnlocked = true; game.audioReady = true; sfx.ensure(); };
 
     const keymap = {
       ArrowLeft: 'left', KeyA: 'left',
@@ -1532,7 +1592,10 @@
       KeyX: 'bomb', KeyK: 'bomb',
     };
     window.addEventListener('keydown', (ev) => {
-      sfx.ensure();
+      const firstGesture = !audioUnlocked;
+      unlock();
+      // First Space on the menu just powers on (starts menu music) — it does not launch.
+      if (firstGesture && game.state === 'menu' && ev.code === 'Space') { ev.preventDefault(); return; }
       if (ev.code === 'KeyP' && game.state === 'play') { paused = !paused; return; }
       if (ev.code === 'KeyM') { sfx.muted = !sfx.muted; return; }
       // --- test cheats ---
@@ -1556,8 +1619,8 @@
       if (k) { input[k] = false; ev.preventDefault(); }
     });
     window.addEventListener('blur', () => { for (const k in input) input[k] = false; });
-    // Unlock audio (and start menu music) on a click that doesn't launch the game.
-    canvas.addEventListener('pointerdown', () => sfx.ensure());
+    // A click also powers on audio + menu music (without launching).
+    canvas.addEventListener('pointerdown', unlock);
 
     // scale canvas to fit window while keeping aspect
     function fit() {
@@ -1574,9 +1637,13 @@
       last = now;
       if (!paused) game.update(dt, input);
       // Arcade music follows game state once a gesture has unlocked audio.
+      // 'play' uses the driving track; menu + results use the slower menu track,
+      // ducked to a quieter volume on the results/leaderboard screen.
       if (sfx.ctx && sfx.ctx.state === 'running') {
         const ms = game.state === 'play' ? 'game' : 'menu';
         if (ms !== musicState) { musicState = ms; sfx.startMusic(ms); }
+        const vol = game.state === 'over' ? 0.16 : 0.5;
+        if (vol !== musicVol) { musicVol = vol; sfx.setMusicVolume(vol); }
       }
       Render.draw(ctx, game, paused ? 0 : dt);
       if (paused) {
