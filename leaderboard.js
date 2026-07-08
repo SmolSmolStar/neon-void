@@ -220,6 +220,8 @@
       '#nv-lb .c-wv{width:30px;flex:0 0 30px;text-align:right;color:#5affc8;font-variant-numeric:tabular-nums;}',
       '#nv-lb .c-dt{width:44px;flex:0 0 44px;text-align:right;color:#8fb2cf;font-size:10px;}',
       '#nv-lb .row.top .c-rk{color:#4df3ff;font-weight:700;}',
+      '#nv-lb .row.open{opacity:.3;}#nv-lb .row.open .c-nm,#nv-lb .row.open span{color:#5f7794;}',
+      '#nv-lb .row .crown{color:#ffd25a;text-shadow:0 0 8px rgba(255,210,90,.8);margin-right:3px;}',
       '#nv-lb .row.me{background:rgba(77,243,255,.10);box-shadow:inset 0 0 0 1px rgba(77,243,255,.3);}',
       '@keyframes nvflash{0%,100%{background:rgba(77,243,255,.10)}50%{background:rgba(255,90,240,.4)}}',
       '#nv-lb .row.flash{animation:nvflash .5s ease 3;}',
@@ -357,6 +359,52 @@
 
   function showOverlay() { lbEl.overlay.classList.add('show'); }
   function hideOverlay() { lbEl.overlay.classList.remove('show'); }
+
+  // Neon confetti burst — fired when a run claims #1 on the weekly board.
+  function neonConfetti() {
+    if (!lbEl.overlay) return;
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var VW = window.innerWidth, VH = window.innerHeight;
+    var cv = document.createElement('canvas');
+    cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:80;';
+    cv.width = VW * dpr; cv.height = VH * dpr;
+    lbEl.overlay.appendChild(cv);
+    var ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+    var colors = ['#4df3ff', '#ff4df0', '#ffd25a', '#5affc8', '#ffffff'];
+    var cx = VW / 2, cy = VH * 0.42, parts = [];
+    for (var i = 0; i < 150; i++) {
+      var burst = i < 80, a = Math.random() * Math.PI * 2, sp = 140 + Math.random() * 340;
+      parts.push({
+        x: burst ? cx : Math.random() * VW,
+        y: burst ? cy : -20 - Math.random() * VH * 0.3,
+        vx: burst ? Math.cos(a) * sp : (Math.random() - 0.5) * 70,
+        vy: burst ? Math.sin(a) * sp - 140 : 40 + Math.random() * 130,
+        w: 3 + Math.random() * 4, hh: 8 + Math.random() * 13,
+        rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 13,
+        col: colors[(Math.random() * colors.length) | 0], life: 1,
+      });
+    }
+    var last = performance.now(), elapsed = 0;
+    (function frame(now) {
+      var dt = Math.min(0.05, (now - last) / 1000); last = now; elapsed += dt;
+      ctx.clearRect(0, 0, VW, VH);
+      ctx.globalCompositeOperation = 'lighter';
+      for (var j = 0; j < parts.length; j++) {
+        var p = parts[j];
+        p.vy += 280 * dt; p.vx *= Math.pow(0.9, dt * 60);
+        p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+        if (elapsed > 2.2) p.life -= dt * 0.9;
+        if (p.life <= 0) continue;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+        ctx.shadowColor = p.col; ctx.shadowBlur = 10; ctx.fillStyle = p.col;
+        ctx.fillRect(-p.w / 2, -p.hh / 2, p.w, p.hh);
+        ctx.restore();
+      }
+      if (elapsed < 3.8) requestAnimationFrame(frame);
+      else if (cv.parentNode) cv.parentNode.removeChild(cv);
+    })(last);
+  }
   function setStatus(msg, kind) { lbEl.status.textContent = msg || ''; lbEl.status.className = 'status' + (kind ? ' ' + kind : ''); }
 
   function showBanner(rank, tot, score, wave) {
@@ -388,12 +436,25 @@
       if (me && (r.name || '').toLowerCase() === me) li.classList.add('me');
       if (highlightKey && key === highlightKey) li.classList.add('flash');
       li.appendChild(h('span', 'c-rk', '' + (i + 1)));
-      var nm = h('span', 'c-nm', r.name || '???'); nm.title = r.name || ''; li.appendChild(nm);
+      var nm = h('span', 'c-nm');
+      if (i === 0) nm.appendChild(h('span', 'crown', '★'));
+      nm.appendChild(document.createTextNode(r.name || '???'));
+      nm.title = r.name || ''; li.appendChild(nm);
       li.appendChild(h('span', 'c-sc', Number(r.score).toLocaleString()));
       li.appendChild(h('span', 'c-wv', (r.wave > 0) ? String(r.wave) : '—'));
       var dt = h('span', 'c-dt', fmtDate(r.created_at)); dt.title = fmtDateFull(r.created_at); li.appendChild(dt);
       lbEl.list.appendChild(li);
     });
+    // Pad to a full top-10 arcade table — dimmed "open" slots invite challengers.
+    for (var k = display.length; k < CFG.top; k++) {
+      var li = h('li', 'row open');
+      li.appendChild(h('span', 'c-rk', '' + (k + 1)));
+      li.appendChild(h('span', 'c-nm', '— — —'));
+      li.appendChild(h('span', 'c-sc', '—'));
+      li.appendChild(h('span', 'c-wv', '—'));
+      li.appendChild(h('span', 'c-dt', '—'));
+      lbEl.list.appendChild(li);
+    }
     highlightKey = null;
   }
 
@@ -414,7 +475,12 @@
       boardMode = 'week';
       if (lbEl.tabWeek) { lbEl.tabWeek.classList.add('on'); lbEl.tabStage.classList.remove('on'); lbEl.sub.textContent = 'NEON VOID · THIS WEEK'; }
       return Promise.all([refresh(), getPlacement(name, score)]);
-    }).then(function (res) { if (res && res[1]) showBanner(res[1].rank, res[1].total, score, wave); })
+    }).then(function (res) {
+      if (res && res[1]) {
+        showBanner(res[1].rank, res[1].total, score, wave);
+        if (res[1].rank === 1) { neonConfetti(); setStatus('★ TOP PILOT — #1 THIS WEEK! ★', 'ok'); }
+      }
+    })
       .catch(function (err) { setStatus('save failed — ' + (err && err.message ? err.message.slice(0, 40) : 'try again'), 'err'); })
       .then(function () { lbEl.save.disabled = false; });
   }
@@ -476,7 +542,7 @@
     requestAnimationFrame(tick);
     window.__lb = {
       refresh: refresh, submit: doSubmit, fetchBoard: fetchBoard, getPlacement: getPlacement,
-      switchBoard: switchBoard, discover: discover, renderCodex: renderCodex,
+      switchBoard: switchBoard, discover: discover, renderCodex: renderCodex, confetti: neonConfetti,
       showOverlay: showOverlay, hideOverlay: hideOverlay,
       get rows() { return lastRows; }, get boardMode() { return boardMode; },
       get discovered() { return Array.from(discovered); },
