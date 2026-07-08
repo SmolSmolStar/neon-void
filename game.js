@@ -984,6 +984,22 @@
   // ============================================================
   // Rendering (browser only — safe to skip in Node)
   // ============================================================
+  // Per-stage ambience: the void's gradient + nebula tints drift subtly as the
+  // player progresses (loosely foreshadowing each stage's boss hue). Endless
+  // mode cycles the set. Transitions hide under the stage-clear flash.
+  const STAGE_BG = [
+    { top: '#060312', mid: '#0a0620', bot: '#120a2e', neb: ['rgba(80,40,160,', 'rgba(20,80,160,'] },   // 1 · classic violet
+    { top: '#070311', mid: '#0c0720', bot: '#1a0d26', neb: ['rgba(80,40,160,', 'rgba(170,90,40,'] },   // 2 · ember drift
+    { top: '#070410', mid: '#0d0a1e', bot: '#1c1424', neb: ['rgba(90,50,150,', 'rgba(160,130,40,'] },  // 3 · gold haze
+    { top: '#040510', mid: '#081120', bot: '#0a2022', neb: ['rgba(40,90,150,', 'rgba(40,150,90,'] },   // 4 · verdant deep
+    { top: '#03060f', mid: '#071522', bot: '#0a1e2c', neb: ['rgba(50,80,170,', 'rgba(40,160,170,'] },  // 5 · teal current
+    { top: '#040414', mid: '#080d26', bot: '#0a1432', neb: ['rgba(70,50,180,', 'rgba(40,90,190,'] },   // 6 · blue abyss
+    { top: '#030512', mid: '#061524', bot: '#082032', neb: ['rgba(50,70,180,', 'rgba(50,160,200,'] },  // 7 · cyan trench
+    { top: '#070314', mid: '#0e0726', bot: '#180c34', neb: ['rgba(90,40,180,', 'rgba(130,70,210,'] },  // 8 · violet storm
+    { top: '#090312', mid: '#140724', bot: '#220c2c', neb: ['rgba(140,40,150,', 'rgba(200,60,140,'] }, // 9 · rose nebula
+    { top: '#0a0208', mid: '#160512', bot: '#260810', neb: ['rgba(150,40,90,', 'rgba(190,45,50,'] },   // 10 · crimson void
+  ];
+
   const Render = {
     stars: null,
     nebulae: null,
@@ -994,31 +1010,32 @@
         this.stars.push({ x: rand(0, W), y: rand(0, H), layer, r: [0.8, 1.3, 2][layer], sp: [22, 48, 95][layer], tw: rand(0, TAU) });
       }
       this.nebulae = [];
-      const cols = ['rgba(80,40,160,', 'rgba(20,80,160,', 'rgba(160,40,120,'];
       for (let i = 0; i < 5; i++) {
-        this.nebulae.push({ x: rand(0, W), y: rand(0, H), r: rand(120, 260), c: cols[randi(0, 2)], sp: rand(6, 14) });
+        this.nebulae.push({ x: rand(0, W), y: rand(0, H), r: rand(120, 260), ci: randi(0, 1), sp: rand(6, 14) });
       }
     },
 
     draw(ctx, g, dt) {
       if (!this.stars) this.initBackdrop();
       const t = g.time;
+      const pal = STAGE_BG[((g.stage || 1) - 1) % STAGE_BG.length];
 
       // background
       const bg = ctx.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, '#060312');
-      bg.addColorStop(0.55, '#0a0620');
-      bg.addColorStop(1, '#120a2e');
+      bg.addColorStop(0, pal.top);
+      bg.addColorStop(0.55, pal.mid);
+      bg.addColorStop(1, pal.bot);
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // nebulae
+      // nebulae (tinted by the stage palette)
       for (const n of this.nebulae) {
         n.y += n.sp * dt;
         if (n.y - n.r > H) { n.y = -n.r; n.x = rand(0, W); }
+        const c = pal.neb[n.ci % pal.neb.length];
         const gr = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
-        gr.addColorStop(0, n.c + '0.16)');
-        gr.addColorStop(1, n.c + '0)');
+        gr.addColorStop(0, c + '0.16)');
+        gr.addColorStop(1, c + '0)');
         ctx.fillStyle = gr;
         ctx.fillRect(n.x - n.r, n.y - n.r, n.r * 2, n.r * 2);
       }
