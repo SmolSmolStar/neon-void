@@ -87,14 +87,15 @@
     return fetch(CFG.url + '/rest/v1/scores', { method: 'POST', headers: headers({ 'Prefer': 'return=minimal' }), body: JSON.stringify(row) })
       .then(function (r) { if (!r.ok) return r.text().then(function (t) { throw new Error('HTTP ' + r.status + ' ' + t); }); return true; });
   }
-  // The player's weekly rank among distinct pilots (by their best score this week).
+  // Rank THIS RUN against every pilot's weekly best — including your own
+  // previous best (the board already contains this run, deduped to each
+  // pilot's top row). rank 1 therefore means this run is a genuine new #1,
+  // so the confetti/fanfare only fire for real board-topping runs.
   function getPlacement(name, score) {
     if (!configured) return Promise.resolve(null);
-    var me = (name || '').toLowerCase();
     return fetchBoard('week').then(function (board) {
-      var myBest = score, better = 0;
-      for (var i = 0; i < board.length; i++) { if ((board[i].name || '').toLowerCase() === me) { myBest = Math.max(myBest, board[i].score); break; } }
-      for (var j = 0; j < board.length; j++) { if ((board[j].name || '').toLowerCase() !== me && board[j].score > myBest) better++; }
+      var better = 0;
+      for (var i = 0; i < board.length; i++) if (board[i].score > score) better++;
       return { rank: better + 1, total: Math.max(board.length, better + 1) };
     }).catch(function () { return null; });
   }
