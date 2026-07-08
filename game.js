@@ -112,6 +112,10 @@
       this.stage = 1;
       this.wave = 1;
       if (this.god) this.usedCheats = true; // god left on from a previous run
+      // entry flight: the ship rises from the bottom edge into position —
+      // continuity with the menu's fly-off into the horizon
+      this.entryT = 0.9;
+      this.player.y = H - 18;
       this.announce('STAGE 1');
       this.sfx.play('start');
     }
@@ -230,6 +234,16 @@
         p.x = clamp(p.x + dx * sp * dt, p.r + 4, W - p.r - 4);
         p.y = clamp(p.y + dy * sp * dt, H * 0.35, H - p.r - 6);
         p.tilt = lerp(p.tilt, dx * 0.35, 1 - Math.pow(0.001, dt));
+      }
+      // entry flight: vertical path is scripted (ease up from the bottom edge);
+      // horizontal control + firing stay live so it never feels like a cutscene
+      if (this.entryT > 0) {
+        this.entryT -= dt;
+        const ek = 1 - Math.max(0, this.entryT) / 0.9;
+        p.y = (H - 18) + ((H - 90) - (H - 18)) * (1 - Math.pow(1 - ek, 3));
+        p.inv = Math.max(p.inv, 0.3);
+        if (this.particles.length < 420) // extra thrust while climbing in
+          this.particles.push(part(p.x + rand(-4, 4), p.y + 15, rand(-20, 20), rand(160, 260), rand(0.3, 0.5), rand(2.5, 4.5), '#8ef7ff', 'trail'));
       }
       p.inv = Math.max(0, p.inv - dt);
       p.engine += dt;
