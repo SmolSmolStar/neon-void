@@ -209,49 +209,59 @@
         x, y, vx, vy, dmg, r: 4, color: WEAPONS[p.weapon].color, pierce: 0, homing: 0, trail: false,
       }, opts));
 
+      // Every level makes a clear difference: smooth +damage per level, bullets
+      // grow, and the bullet-count jumps stay as the big milestone moments.
       switch (p.weapon) {
         case 'blaster': {
           p.fireCd = Math.max(0.07, 0.16 - lv * 0.012);
-          const dmg = 1 + Math.floor(lv / 3);
-          if (lv < 3) B(p.x, p.y - 14, 0, -640, dmg);
-          else if (lv < 5) { B(p.x - 7, p.y - 10, 0, -640, dmg); B(p.x + 7, p.y - 10, 0, -640, dmg); }
-          else { B(p.x - 9, p.y - 8, 0, -660, dmg); B(p.x + 9, p.y - 8, 0, -660, dmg); B(p.x, p.y - 16, 0, -700, dmg + 1); }
-          this.sfx.play('shoot');
+          const dmg = 1 + (lv - 1) * 0.5;
+          const r = 4 + lv * 0.5;
+          const barrels = lv < 3 ? 1 : lv < 5 ? 2 : 3;
+          if (barrels === 1) B(p.x, p.y - 14, 0, -640, dmg, { r });
+          else if (barrels === 2) { B(p.x - 7, p.y - 10, 0, -650, dmg, { r }); B(p.x + 7, p.y - 10, 0, -650, dmg, { r }); }
+          else { B(p.x - 9, p.y - 8, 0, -660, dmg, { r }); B(p.x + 9, p.y - 8, 0, -660, dmg, { r }); B(p.x, p.y - 18, 0, -720, dmg + 1, { r: r + 1 }); }
+          this.sfx.play('shoot', lv);
           break;
         }
         case 'spread': {
           p.fireCd = Math.max(0.11, 0.24 - lv * 0.014);
-          const n = Math.min(3 + Math.floor((lv - 1) / 1.5), 7);
-          const arc = 0.28 + n * 0.055;
+          const n = Math.min(3 + (lv - 1), 8);
+          const arc = 0.3 + n * 0.045;
+          const dmg = 1 + (lv - 1) * 0.14;
+          const r = 3.5 + lv * 0.35;
           for (let i = 0; i < n; i++) {
             const a = -Math.PI / 2 + (n === 1 ? 0 : (i / (n - 1) - 0.5) * arc);
-            B(p.x, p.y - 12, Math.cos(a) * 540, Math.sin(a) * 540, 1, { r: 3.5 });
+            B(p.x, p.y - 12, Math.cos(a) * 560, Math.sin(a) * 560, dmg, { r });
           }
-          this.sfx.play('shoot2');
+          this.sfx.play('shoot2', lv);
           break;
         }
         case 'laser': {
           p.fireCd = Math.max(0.05, 0.11 - lv * 0.008);
-          const dmg = 1 + lv * 0.35;
-          B(p.x, p.y - 18, 0, -980, dmg, { r: 3, pierce: 1 + Math.floor(lv / 2), trail: true });
-          if (lv >= 4) { B(p.x - 10, p.y - 8, 0, -980, dmg * 0.6, { r: 2.4, pierce: 1, trail: true }); B(p.x + 10, p.y - 8, 0, -980, dmg * 0.6, { r: 2.4, pierce: 1, trail: true }); }
-          this.sfx.play('laser');
+          const dmg = 1 + lv * 0.4;
+          const r = 3 + lv * 0.4;
+          B(p.x, p.y - 18, 0, -980, dmg, { r, pierce: 1 + Math.floor(lv / 2), trail: true });
+          if (lv >= 4) { B(p.x - 10, p.y - 8, 0, -980, dmg * 0.6, { r: r * 0.8, pierce: 1, trail: true }); B(p.x + 10, p.y - 8, 0, -980, dmg * 0.6, { r: r * 0.8, pierce: 1, trail: true }); }
+          this.sfx.play('laser', lv);
           break;
         }
         case 'missile': {
           p.fireCd = Math.max(0.16, 0.34 - lv * 0.022);
+          const dmg = 2 + lv * 0.6;
+          const r = 5 + lv * 0.4;
           const n = lv >= 3 ? 2 : 1;
           for (let i = 0; i < n; i++) {
             const off = n === 1 ? 0 : (i === 0 ? -12 : 12);
-            B(p.x + off, p.y - 8, off * 8, -300, 2 + lv * 0.5, { r: 5, homing: 3.2 + lv * 0.35, splash: 46, trail: true });
+            B(p.x + off, p.y - 8, off * 8, -300, dmg, { r, homing: 3.2 + lv * 0.35, splash: 46 + lv * 4, trail: true });
           }
-          if (lv >= 5) B(p.x, p.y - 16, 0, -320, 2 + lv * 0.5, { r: 5, homing: 4.2, splash: 46, trail: true });
-          this.sfx.play('missile');
+          if (lv >= 5) B(p.x, p.y - 16, 0, -320, dmg, { r, homing: 4.2, splash: 46 + lv * 4, trail: true });
+          this.sfx.play('missile', lv);
           break;
         }
       }
-      // muzzle flash
-      for (let i = 0; i < 2; i++)
+      // muzzle flash grows a touch with level
+      const mf = 2 + Math.floor(lv / 2);
+      for (let i = 0; i < mf; i++)
         this.particles.push(part(p.x + rand(-4, 4), p.y - 16, rand(-40, 40), rand(-120, -60), 0.12, rand(2, 3.5), WEAPONS[p.weapon].color, 'spark'));
     }
 
@@ -350,7 +360,7 @@
       const t = ENEMY_TYPES[type];
       const e = {
         type, x, y, r: t.r,
-        hp: Math.ceil(t.hp * (0.85 + d * 0.24)), maxHp: 0,
+        hp: Math.ceil(t.hp * (0.9 + d * 0.34)), maxHp: 0, // tuned up to match stronger weapons
         color: t.color, score: t.score, dropChance: t.drop,
         t: rand(0, TAU), fireT: rand(0.8, 2.4), hitT: 0,
         vx: 0, vy: 0, baseX: x, spd: (0.85 + d * 0.055),
@@ -439,7 +449,7 @@
       const cfg = BOSSES[(this.stage - 1) % STAGES];
       this.announce('!! ' + cfg.name + ' !!');
       this.sfx.play('boss');
-      const hp = Math.round((280 + this.stage * 210) * cfg.hpMul);
+      const hp = Math.round((340 + this.stage * 300) * cfg.hpMul);
       const e = {
         type: 'boss', cfg, x: W / 2, y: -80, r: cfg.r,
         hp, maxHp: hp, color: cfg.color, score: 4000 + this.stage * 1200, dropChance: 1,
@@ -759,15 +769,23 @@
       this.sfx.play('collect'); // bright "grabbed it" chime on every pickup
       if (d.kind.startsWith('weapon:')) {
         const w = d.kind.slice(7);
-        if (w === p.weapon) {
-          if (p.level < WEAPONS[w].maxLv) { p.level++; label = WEAPONS[w].name + ' LV' + p.level; }
-          else { this.score += 500; label = 'MAX +500'; }
-        } else {
-          p.weapon = w;
-          label = WEAPONS[w].name + ' LV' + p.level;
-        }
+        p.weapon = w; // grab it — switching is free; you always keep progressing
         color = WEAPONS[w].color;
-        this.sfx.play('powerup');
+        if (p.level < WEAPONS[w].maxLv) {
+          p.level++;
+          label = WEAPONS[w].name + ' LV' + p.level;
+          // level-up celebration: flash, shake, burst, rising chime
+          this.flash = Math.max(this.flash, 0.5);
+          this.shake = Math.max(this.shake, 7);
+          this.burst(p.x, p.y, 28, color);
+          this.burst(p.x, p.y, 10, '#ffffff');
+          this.floaters.push({ x: p.x, y: p.y - 44, text: 'LEVEL ' + p.level + '!', t: 1.0, color });
+          this.sfx.play('levelup', p.level);
+        } else {
+          this.score += 500;
+          label = WEAPONS[w].name + ' MAX +500';
+          this.sfx.play('powerup');
+        }
       } else if (d.kind === 'heal') {
         if (p.hp < p.maxHp) { p.hp++; label = '+1 HULL'; }
         else { this.score += 300; label = '+300'; }
@@ -1520,13 +1538,15 @@
       src.connect(gn); gn.connect(this.ctx.destination);
       src.start(t0);
     }
-    play(name) {
+    play(name, lv) {
       if (!this.ctx || this.muted) return;
+      var pt = 1 + ((lv || 1) - 1) * 0.03; // shots pitch up as the weapon levels
       switch (name) {
-        case 'shoot': this.tone(880, 0.07, 'square', 0.035, 0.5); break;
-        case 'shoot2': this.tone(660, 0.09, 'sawtooth', 0.03, 0.55); break;
-        case 'laser': this.tone(1400, 0.06, 'sawtooth', 0.03, 0.3); break;
-        case 'missile': this.tone(300, 0.18, 'sawtooth', 0.045, 2.2); this.noise(0.1, 0.03); break;
+        case 'shoot': this.tone(880 * pt, 0.07, 'square', 0.035, 0.5); break;
+        case 'shoot2': this.tone(660 * pt, 0.09, 'sawtooth', 0.03, 0.55); break;
+        case 'laser': this.tone(1400 * (1 + ((lv || 1) - 1) * 0.022), 0.06, 'sawtooth', 0.03, 0.3); break;
+        case 'missile': this.tone(300 * pt, 0.18, 'sawtooth', 0.045, 2.2); this.noise(0.1, 0.03); break;
+        case 'levelup': { var lb = 1 + ((lv || 1) - 1) * 0.045; this.tone(660 * lb, 0.08, 'square', 0.06); this.tone(990 * lb, 0.1, 'square', 0.055, 1, 0.06); this.tone(1480 * lb, 0.16, 'triangle', 0.05, 1, 0.12); break; }
         case 'hit': this.tone(220, 0.05, 'square', 0.03, 0.7); break;
         case 'boom': this.noise(0.22, 0.14); this.tone(140, 0.2, 'triangle', 0.1, 0.4); break;
         case 'bigBoom': this.noise(0.5, 0.22); this.tone(80, 0.5, 'triangle', 0.16, 0.3); this.tone(55, 0.6, 'sine', 0.14, 0.5, 0.05); break;
