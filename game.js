@@ -1235,8 +1235,8 @@
             ctx.fillStyle = '#ff5a7a'; ctx.fill();
             this.noGlow(ctx);
           } else {
-            ctx.fillStyle = 'rgba(255,90,122,0.10)'; ctx.fill();
-            ctx.strokeStyle = 'rgba(255,120,150,0.45)'; ctx.lineWidth = 1; ctx.stroke();
+            ctx.fillStyle = 'rgba(255,90,122,0.05)'; ctx.fill();
+            ctx.strokeStyle = 'rgba(255,120,150,0.28)'; ctx.lineWidth = 1; ctx.stroke();
           }
         }
         // bombs
