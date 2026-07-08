@@ -2,7 +2,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const TYPES = {
@@ -37,7 +37,7 @@ export function startServer(port = 0) {
 }
 
 // Allow `node test/server.mjs [port]` to just serve for manual play.
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const port = Number(process.argv[2]) || 8080;
   startServer(port).then(({ port }) => {
     console.log(`Starfall serving at http://127.0.0.1:${port}/`);
