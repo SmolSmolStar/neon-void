@@ -96,6 +96,9 @@
       this.bossActive = false;
       this.won = false;
       this.victoryT = 0;
+      this._chip1 = null;      // last two weapon-chip types (anti-streak guard)
+      this._chip2 = null;
+      this._capHinted = false; // one big cap explainer per cap tier
       this.shake = 0;
       this.hitstop = 0;
       this.flash = 0;
@@ -122,6 +125,16 @@
     // stages (3,3,4,4,5,5,6...) so there is always a next unlock to work toward.
     weaponLevelCap() {
       return Math.min(6, Math.ceil(this.stage / 2) + 2);
+    }
+
+    // Where the next weapon-cap unlock happens (null once cap is maxed) — used
+    // to tell the player exactly what to aim for ("LV4 UNLOCKS AT STAGE 3").
+    nextCapInfo() {
+      const cur = this.weaponLevelCap();
+      if (cur >= 6) return null;
+      let s = this.stage + 1;
+      while (Math.min(6, Math.ceil(s / 2) + 2) <= cur) s++;
+      return { stage: s, level: cur + 1 };
     }
 
     announce(text) {
@@ -356,7 +369,7 @@
         // Formations arrive larger and more often as stages advance; the 5th
         // wave is a crescendo assault right before the boss.
         const crescendo = this.wave >= WAVES_PER_STAGE ? 0.5 : 0;
-        this.spawnT = Math.max(1.1, 3.35 - this.stage * 0.16 - (this.wave - 1) * 0.1 - crescendo) * rand(0.85, 1.15);
+        this.spawnT = Math.max(1.05, 2.8 - this.stage * 0.14 - (this.wave - 1) * 0.1 - crescendo) * rand(0.85, 1.15);
         this.spawnFormation(d);
       }
     }
@@ -366,7 +379,7 @@
       const t = ENEMY_TYPES[type];
       const e = {
         type, x, y, r: t.r,
-        hp: Math.ceil(t.hp * (0.85 + d * 0.26)), maxHp: 0, // tuned for stage-capped weapon power
+        hp: Math.ceil(t.hp * (0.8 + d * 0.24)), maxHp: 0, // snappy kills; density carries the pressure
         color: t.color, score: t.score, dropChance: t.drop,
         t: rand(0, TAU), fireT: rand(0.8, 2.4), hitT: 0,
         vx: 0, vy: 0, baseX: x, spd: (0.85 + d * 0.055),
@@ -423,7 +436,7 @@
           break;
         }
         case 'swarm': {             // a fast cloud of light enemies
-          const n = 4 + s;
+          const n = 3 + s;
           for (let i = 0; i < n; i++) this.mkEnemy(Math.random() < 0.7 ? 'darter' : 'drone', rand(40, W - 40), -30 - rand(0, 130), d);
           break;
         }
@@ -701,7 +714,15 @@
         const clearBonus = 1500 * this.stage;
         this.score += clearBonus;
         this.floaters.push({ x: W / 2, y: H * 0.5, text: 'STAGE CLEAR +' + clearBonus, t: 1.8, color: '#ffd25a' });
+        const capBefore = this.weaponLevelCap();
         this.stage++;
+        const capAfter = this.weaponLevelCap();
+        if (capAfter > capBefore) {
+          // celebrate the unlock so the cap system teaches itself
+          this.floaters.push({ x: W / 2, y: H * 0.58, text: 'WEAPON CAP RAISED — LV' + capAfter + ' UNLOCKED!', t: 2.2, color: '#7dff4d' });
+          this.sfx.play('levelup', capAfter);
+          this._capHinted = false; // fresh hint for the next tier
+        }
         this.wave = 1;
         this.flash = 1;
         this.shake = 30;
@@ -724,7 +745,7 @@
         for (let i = 0; i < 5; i++) this.spawnDrop(e.x + rand(-60, 60), e.y + rand(-30, 30), true);
         // clear enemy bullets as reward
         this.ebullets.length = 0;
-      } else if (Math.random() < e.dropChance || this.killsSinceDrop >= 7) {
+      } else if (Math.random() < e.dropChance || this.killsSinceDrop >= 6) {
         this.spawnDrop(e.x, e.y, false);
         this.killsSinceDrop = 0;
       } else {
@@ -751,6 +772,12 @@
         let w;
         if (Math.random() < 0.4) w = this.player.weapon;
         else { const others = WEAPON_KEYS.filter((k) => k !== this.player.weapon); w = others[randi(0, others.length - 1)]; }
+        // anti-streak: never the same weapon chip three times in a row
+        if (w === this._chip1 && w === this._chip2) {
+          const alts = WEAPON_KEYS.filter((k) => k !== w);
+          w = alts[randi(0, alts.length - 1)];
+        }
+        this._chip2 = this._chip1; this._chip1 = w;
         kind = 'weapon:' + w;
       } else if (roll < 0.78) kind = 'heal';
       else if (roll < 0.9) kind = 'shield';
@@ -806,7 +833,11 @@
           } else {
             this.score += 250;
             label = 'LV CAP +250';
-            this.floaters.push({ x: p.x, y: p.y - 44, text: 'CLEAR THE STAGE TO RAISE CAP', t: 1.3, color: '#8fb2cf' });
+            const nxt = this.nextCapInfo();
+            if (nxt) {
+              this.floaters.push({ x: p.x, y: p.y - 44, text: 'LV' + nxt.level + ' UNLOCKS AT STAGE ' + nxt.stage, t: 1.4, color: '#8fb2cf' });
+              if (!this._capHinted) { this._capHinted = true; this.announce('REACH STAGE ' + nxt.stage + ' TO UNLOCK LV' + nxt.level); }
+            }
             this.sfx.play('powerup');
           }
         } else {
@@ -1526,7 +1557,7 @@
       // controls (kept above the sun so nothing overlaps) — adapt to input type
       ctx.fillStyle = 'rgba(175,205,240,0.6)'; ctx.font = '11px monospace';
       ctx.fillText(g.isTouch ? 'DRAG to fly & fire      ✸ button to bomb' : 'MOVE  WASD / ARROWS      FIRE  SPACE      BOMB  X', W / 2, 350);
-      ctx.fillText('collect chips to level up · beat a boss to advance', W / 2, 368);
+      ctx.fillText('collect chips to level up · higher stages unlock higher levels', W / 2, 368);
 
       // blinking prompt — one press starts the game (music comes with it)
       ctx.globalAlpha = 0.5 + 0.5 * Math.sin(T * 5);
