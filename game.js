@@ -790,15 +790,15 @@
       for (let i = this.drops.length - 1; i >= 0; i--) {
         const d = this.drops[i];
         d.t += dt;
-        // magnet: a wide, gentle chase — chips notice you from far out and trail
-        // behind (240 vs your 320), so there's real time to kite/reposition the
-        // ones you don't want before they give up. Never relentless.
+        // magnet: a gentle chase — chips trail behind (260 vs your 320), so
+        // there's real time to kite/reposition the ones you don't want before
+        // they give up. Never relentless.
         d.magT = d.magT || 0;
         if (p.alive && d.magT < 2.0 && dist2(d.x, d.y, p.x, p.y) < 120 * 120) {
           d.magT += dt;
           const a = Math.atan2(p.y - d.y, p.x - d.x);
-          d.x += Math.cos(a) * 240 * dt;
-          d.y += Math.sin(a) * 240 * dt;
+          d.x += Math.cos(a) * 260 * dt;
+          d.y += Math.sin(a) * 260 * dt;
         } else {
           d.y += d.vy * dt;
           d.x += Math.sin(d.t * 3) * 20 * dt;
