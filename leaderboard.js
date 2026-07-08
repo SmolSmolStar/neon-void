@@ -119,7 +119,7 @@
   ];
   var PICKUPS = [
     { id: 'p:blaster', c: '#4df3ff', lb: 'B', nm: 'BLASTER', nt: 'rapid straight shots' },
-    { id: 'p:spread', c: '#7dff4d', lb: 'S', nm: 'SPREAD', nt: 'wide fan of shots' },
+    { id: 'p:spread', c: '#ffd94d', lb: 'S', nm: 'SPREAD', nt: 'wide fan of shots' },
     { id: 'p:laser', c: '#ff4df0', lb: 'L', nm: 'LASER', nt: 'piercing beam' },
     { id: 'p:missile', c: '#ffb84d', lb: 'M', nm: 'MISSILE', nt: 'homing missiles' },
     { id: 'p:heal', c: '#7dff4d', lb: '+', nm: 'REPAIR', nt: 'restore hull' },

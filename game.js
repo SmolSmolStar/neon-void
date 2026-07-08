@@ -19,7 +19,7 @@
   // ---------- weapon definitions ----------
   const WEAPONS = {
     blaster: { name: 'BLASTER', color: '#4df3ff', maxLv: 6 },
-    spread:  { name: 'SPREAD',  color: '#7dff4d', maxLv: 6 },
+    spread:  { name: 'SPREAD',  color: '#ffd94d', maxLv: 6 },
     laser:   { name: 'LASER',   color: '#ff4df0', maxLv: 6 },
     missile: { name: 'MISSILE', color: '#ffb84d', maxLv: 6 },
   };
