@@ -794,7 +794,7 @@
         // behind (240 vs your 320), so there's real time to kite/reposition the
         // ones you don't want before they give up. Never relentless.
         d.magT = d.magT || 0;
-        if (p.alive && d.magT < 1.4 && dist2(d.x, d.y, p.x, p.y) < 170 * 170) {
+        if (p.alive && d.magT < 2.0 && dist2(d.x, d.y, p.x, p.y) < 170 * 170) {
           d.magT += dt;
           const a = Math.atan2(p.y - d.y, p.x - d.x);
           d.x += Math.cos(a) * 240 * dt;
