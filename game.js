@@ -62,6 +62,8 @@
       this.sfx = opts.sfx || { play() {} };
       this.hiscore = opts.hiscore || 0;
       this.onHiscore = opts.onHiscore || function () {};
+      this.onWin = opts.onWin || function () {};
+      this.cleared = !!opts.cleared; // lifetime "beat all 10 stages" achievement
       this.state = 'menu'; // menu | play | over
       this.time = 0;
       this.reset();
@@ -92,6 +94,7 @@
       this.killsSinceDrop = 5; // pity counter starts warm so first drops come fast
       this.bossActive = false;
       this.won = false;
+      this.victoryT = 0;
       this.shake = 0;
       this.hitstop = 0;
       this.flash = 0;
@@ -151,6 +154,14 @@
 
       // combo decay
       if ((this.comboT -= dt) <= 0) this.combo = 1;
+
+      // victory fireworks
+      if (this.victoryT > 0) {
+        this.victoryT -= dt;
+        if (Math.random() < 0.3) {
+          this.burst(rand(60, W - 60), rand(70, H * 0.5), 18, ['#ffd25a', '#4df3ff', '#ff4df0', '#7dff4d'][randi(0, 3)]);
+        }
+      }
     }
 
     // ---------- player ----------
@@ -612,8 +623,20 @@
         this.wave = 1;
         this.flash = 1;
         this.shake = 30;
-        if (this.stage > STAGES && !this.won) { this.won = true; this.announce('SECTOR CLEARED!'); }
-        else this.announce('STAGE ' + this.stage);
+        if (this.stage > STAGES && !this.won) {
+          // Cleared all stages — big victory flourish (endless play continues).
+          this.won = true;
+          this.cleared = true;
+          this.victoryT = 5;
+          this.sfx.play('victory');
+          this.onWin();
+          this.player.hp = this.player.maxHp;
+          this.player.bombs = Math.min(this.player.bombs + 2, 6);
+          this.burst(W / 2, H * 0.4, 90, '#ffd25a');
+          this.burst(W / 2, H * 0.4, 40, '#ffffff');
+        } else {
+          this.announce('STAGE ' + this.stage);
+        }
         // shower of drops as a reward
         for (let i = 0; i < 5; i++) this.spawnDrop(e.x + rand(-60, 60), e.y + rand(-30, 30), true);
         // clear enemy bullets as reward
@@ -1205,6 +1228,22 @@
         ctx.globalAlpha = 1;
       }
 
+      // victory celebration (clearing all 10 stages)
+      if (g.victoryT > 0) {
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.globalAlpha = clamp(g.victoryT, 0, 1);
+        this.glow(ctx, '#ffd25a', 26);
+        ctx.fillStyle = '#ffe98a';
+        ctx.font = 'bold 30px monospace';
+        ctx.fillText('★ SECTOR CLEARED ★', W / 2, H * 0.24);
+        ctx.font = '13px monospace';
+        ctx.fillStyle = '#eaffff';
+        ctx.fillText('ALL DREADNOUGHTS DESTROYED', W / 2, H * 0.24 + 26);
+        this.noGlow(ctx);
+        ctx.restore();
+      }
+
       // boss name + health bar
       const boss = g.enemies.find(e => e.type === 'boss');
       if (boss && boss.y > 0) {
@@ -1276,10 +1315,14 @@
       // tagline + hi-score
       ctx.font = 'bold 12px monospace';
       this.glow(ctx, '#ffd25a', 8); ctx.fillStyle = '#ffd98a';
-      ctx.fillText('10 STAGES · 10 DREADNOUGHTS · ONE PILOT', W / 2, ty + 90);
+      ctx.fillText('ONE PILOT AGAINST THE VOID', W / 2, ty + 90);
       this.noGlow(ctx);
       ctx.font = '12px monospace'; ctx.fillStyle = 'rgba(180,220,255,0.75)';
       ctx.fillText('HI-SCORE  ' + String(g.hiscore).padStart(7, '0'), W / 2, ty + 114);
+      if (g.cleared) {
+        ctx.font = 'bold 11px monospace'; this.glow(ctx, '#ffd25a', 10); ctx.fillStyle = '#ffe98a';
+        ctx.fillText('★ SECTOR CLEARED — MASTER PILOT ★', W / 2, ty + 136); this.noGlow(ctx);
+      }
 
       // controls (kept above the sun so nothing overlaps)
       ctx.fillStyle = 'rgba(175,205,240,0.6)'; ctx.font = '11px monospace';
@@ -1387,6 +1430,7 @@
         case 'boss': this.tone(110, 0.5, 'sawtooth', 0.1, 0.7); this.tone(82, 0.6, 'sawtooth', 0.1, 0.8, 0.3); break;
         case 'bossShoot': this.tone(240, 0.1, 'square', 0.04, 0.8); break;
         case 'start': this.tone(392, 0.1, 'square', 0.06); this.tone(523, 0.1, 'square', 0.06, 1, 0.09); this.tone(659, 0.1, 'square', 0.06, 1, 0.18); this.tone(784, 0.2, 'square', 0.07, 1, 0.27); break;
+        case 'victory': [523, 659, 784, 1046, 1319].forEach((f, i) => this.tone(f, 0.5, 'square', 0.07, 1, i * 0.12)); this.tone(1568, 0.9, 'triangle', 0.06, 1, 0.62); break;
       }
     }
 
@@ -1465,11 +1509,15 @@
 
     let hiscore = 0;
     try { hiscore = parseInt(localStorage.getItem('neonvoid_hi') || '0', 10) || 0; } catch (e) {}
+    let cleared = false;
+    try { cleared = localStorage.getItem('neonvoid_cleared') === '1'; } catch (e) {}
 
     const game = new Game({
       sfx,
       hiscore,
+      cleared,
       onHiscore(v) { try { localStorage.setItem('neonvoid_hi', String(v)); } catch (e) {} },
+      onWin() { try { localStorage.setItem('neonvoid_cleared', '1'); } catch (e) {} },
     });
 
     const input = { left: false, right: false, up: false, down: false, fire: false, bomb: false };
