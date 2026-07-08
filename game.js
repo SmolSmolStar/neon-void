@@ -756,6 +756,7 @@
     collectDrop(d) {
       const p = this.player;
       let label = '', color = '#ffffff';
+      this.sfx.play('collect'); // bright "grabbed it" chime on every pickup
       if (d.kind.startsWith('weapon:')) {
         const w = d.kind.slice(7);
         if (w === p.weapon) {
@@ -773,13 +774,15 @@
         color = '#7dff4d';
         this.sfx.play('heal');
       } else if (d.kind === 'shield') {
+        const before = p.shield;
         p.shield = Math.min(3, p.shield + 1);
-        label = 'SHIELD';
+        label = before === p.shield ? 'SHIELD FULL' : 'SHIELD x' + p.shield;
         color = '#4dc3ff';
         this.sfx.play('shieldUp');
       } else if (d.kind === 'bomb') {
+        const before = p.bombs;
         p.bombs = Math.min(5, p.bombs + 1);
-        label = '+BOMB';
+        label = before === p.bombs ? 'BOMB FULL' : 'BOMB x' + p.bombs;
         color = '#ffb84d';
         this.sfx.play('powerup');
       }
@@ -976,6 +979,27 @@
 
     drawPlayer(ctx, g) {
       const p = g.player;
+
+      // streak halo — a glow that grows and shifts cyan → gold as the combo climbs
+      if (g.combo >= 2) {
+        const s = clamp((g.combo - 2) / 6, 0, 1);
+        const r = 22 + s * 16 + Math.sin(g.time * 8) * 2;
+        const hue = Math.round(lerp(190, 45, s));
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const grd = ctx.createRadialGradient(p.x, p.y, r * 0.35, p.x, p.y, r);
+        grd.addColorStop(0, 'hsla(' + hue + ',100%,70%,' + (0.12 + s * 0.3).toFixed(2) + ')');
+        grd.addColorStop(1, 'hsla(' + hue + ',100%,60%,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU); ctx.fill();
+        if (g.combo >= 4) {
+          ctx.strokeStyle = 'hsla(' + hue + ',100%,78%,' + (0.28 + s * 0.4).toFixed(2) + ')';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(p.x, p.y, r + 3, 0, TAU); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.tilt);
@@ -1254,11 +1278,27 @@
             ctx.strokeStyle = 'rgba(255,120,150,0.28)'; ctx.lineWidth = 1; ctx.stroke();
           }
         }
-        // bombs
-        for (let i = 0; i < p.bombs; i++) {
-          this.glow(ctx, '#ffb84d', 8);
-          ctx.fillStyle = '#ffb84d';
-          ctx.beginPath(); ctx.arc(W - 20 - i * 18, H - 20, 6, 0, TAU); ctx.fill();
+        // shields + bombs (bottom-right), labelled with slots so it's clear they
+        // recharge: filled = you have it, outline = a slot you can still fill.
+        this.noGlow(ctx);
+        ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+        ctx.font = 'bold 8px monospace';
+        ctx.fillStyle = 'rgba(90,200,255,0.8)';
+        ctx.fillText('SHIELD', W - 12, H - 52);
+        for (let i = 0; i < 3; i++) {
+          const sx = W - 16 - i * 15, sy = H - 42, filled = i < p.shield;
+          ctx.beginPath();
+          ctx.moveTo(sx, sy - 5); ctx.lineTo(sx + 5, sy); ctx.lineTo(sx, sy + 5); ctx.lineTo(sx - 5, sy); ctx.closePath();
+          if (filled) { this.glow(ctx, '#4dc3ff', 8); ctx.fillStyle = '#4dc3ff'; ctx.fill(); this.noGlow(ctx); }
+          else { ctx.strokeStyle = 'rgba(90,200,255,0.32)'; ctx.lineWidth = 1; ctx.stroke(); }
+        }
+        ctx.fillStyle = 'rgba(255,184,77,0.8)';
+        ctx.fillText('BOMB', W - 12, H - 28);
+        for (let i = 0; i < 5; i++) {
+          const bx = W - 16 - i * 15, by = H - 18, filled = i < p.bombs;
+          ctx.beginPath(); ctx.arc(bx, by, 5, 0, TAU);
+          if (filled) { this.glow(ctx, '#ffb84d', 8); ctx.fillStyle = '#ffb84d'; ctx.fill(); this.noGlow(ctx); }
+          else { ctx.strokeStyle = 'rgba(255,184,77,0.3)'; ctx.lineWidth = 1; ctx.stroke(); }
         }
         this.noGlow(ctx);
         // weapon indicator
@@ -1501,6 +1541,7 @@
         case 'boss': this.tone(110, 0.5, 'sawtooth', 0.1, 0.7); this.tone(82, 0.6, 'sawtooth', 0.1, 0.8, 0.3); break;
         case 'bossShoot': this.tone(240, 0.1, 'square', 0.04, 0.8); break;
         case 'start': this.tone(392, 0.1, 'square', 0.06); this.tone(523, 0.1, 'square', 0.06, 1, 0.09); this.tone(659, 0.1, 'square', 0.06, 1, 0.18); this.tone(784, 0.2, 'square', 0.07, 1, 0.27); break;
+        case 'collect': this.tone(988, 0.05, 'triangle', 0.07); this.tone(1319, 0.07, 'triangle', 0.06, 1, 0.04); this.tone(1760, 0.11, 'triangle', 0.05, 1, 0.09); break;
         case 'victory': [523, 659, 784, 1046, 1319].forEach((f, i) => this.tone(f, 0.5, 'square', 0.07, 1, i * 0.12)); this.tone(1568, 0.9, 'triangle', 0.06, 1, 0.62); break;
       }
     }
