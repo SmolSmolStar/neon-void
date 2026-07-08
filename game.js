@@ -118,6 +118,12 @@
       return 1 + (this.stage - 1) * 0.42 + (this.wave - 1) * 0.05 + this.time * 0.0022;
     }
 
+    // Weapon power is gated by progression: the level cap rises as you clear
+    // stages (3,3,4,4,5,5,6...) so there is always a next unlock to work toward.
+    weaponLevelCap() {
+      return Math.min(6, Math.ceil(this.stage / 2) + 2);
+    }
+
     announce(text) {
       this.banner = { text, t: 2.2 };
     }
@@ -360,7 +366,7 @@
       const t = ENEMY_TYPES[type];
       const e = {
         type, x, y, r: t.r,
-        hp: Math.ceil(t.hp * (0.9 + d * 0.34)), maxHp: 0, // tuned up to match stronger weapons
+        hp: Math.ceil(t.hp * (0.85 + d * 0.26)), maxHp: 0, // tuned for stage-capped weapon power
         color: t.color, score: t.score, dropChance: t.drop,
         t: rand(0, TAU), fireT: rand(0.8, 2.4), hitT: 0,
         vx: 0, vy: 0, baseX: x, spd: (0.85 + d * 0.055),
@@ -449,7 +455,7 @@
       const cfg = BOSSES[(this.stage - 1) % STAGES];
       this.announce('!! ' + cfg.name + ' !!');
       this.sfx.play('boss');
-      const hp = Math.round((340 + this.stage * 300) * cfg.hpMul);
+      const hp = Math.round((300 + this.stage * 230) * cfg.hpMul);
       const e = {
         type: 'boss', cfg, x: W / 2, y: -80, r: cfg.r,
         hp, maxHp: hp, color: cfg.color, score: 4000 + this.stage * 1200, dropChance: 1,
@@ -689,6 +695,10 @@
       if (e.type === 'boss') {
         this.bossActive = false;
         this.waveT = 0;
+        // stage-clear bonus: visible payoff for progressing (scales with stage)
+        const clearBonus = 1500 * this.stage;
+        this.score += clearBonus;
+        this.floaters.push({ x: W / 2, y: H * 0.5, text: 'STAGE CLEAR +' + clearBonus, t: 1.8, color: '#ffd25a' });
         this.stage++;
         this.wave = 1;
         this.flash = 1;
@@ -734,10 +744,10 @@
       const roll = Math.random();
       let kind;
       if (roll < (generous ? 0.6 : 0.62)) {
-        // Bias toward the current weapon so it levels at a steady pace; the rest
-        // are other-weapon chips — tactical switch opportunities you can take or avoid.
+        // Mild bias toward the current weapon (steady leveling) while keeping
+        // real variety — other weapons appear often enough to plan switches.
         let w;
-        if (Math.random() < 0.55) w = this.player.weapon;
+        if (Math.random() < 0.4) w = this.player.weapon;
         else { const others = WEAPON_KEYS.filter((k) => k !== this.player.weapon); w = others[randi(0, others.length - 1)]; }
         kind = 'weapon:' + w;
       } else if (roll < 0.78) kind = 'heal';
@@ -776,8 +786,9 @@
         const w = d.kind.slice(7);
         color = WEAPONS[w].color;
         if (w === p.weapon) {
-          // your weapon's chip → level it up (celebration)
-          if (p.level < WEAPONS[w].maxLv) {
+          // your weapon's chip → level it up (celebration), gated by the stage cap
+          const cap = this.weaponLevelCap();
+          if (p.level < cap) {
             p.level++;
             label = WEAPONS[w].name + ' LV' + p.level;
             this.flash = Math.max(this.flash, 0.5);
@@ -786,9 +797,14 @@
             this.burst(p.x, p.y, 10, '#ffffff');
             this.floaters.push({ x: p.x, y: p.y - 44, text: 'LEVEL ' + p.level + '!', t: 1.0, color });
             this.sfx.play('levelup', p.level);
-          } else {
+          } else if (p.level >= WEAPONS[w].maxLv) {
             this.score += 500;
             label = WEAPONS[w].name + ' MAX +500';
+            this.sfx.play('powerup');
+          } else {
+            this.score += 250;
+            label = 'LV CAP +250';
+            this.floaters.push({ x: p.x, y: p.y - 44, text: 'CLEAR THE STAGE TO RAISE CAP', t: 1.3, color: '#8fb2cf' });
             this.sfx.play('powerup');
           }
         } else {
@@ -1332,18 +1348,23 @@
           else { ctx.strokeStyle = 'rgba(255,184,77,0.3)'; ctx.lineWidth = 1; ctx.stroke(); }
         }
         this.noGlow(ctx);
-        // weapon indicator
+        // weapon indicator (shows the stage-gated level cap)
         const wcol = WEAPONS[p.weapon].color;
+        const cap = g.weaponLevelCap();
+        const atCap = p.level >= cap && cap < WEAPONS[p.weapon].maxLv;
         ctx.textAlign = 'center';
         ctx.font = 'bold 12px monospace';
         this.glow(ctx, wcol, 8);
         ctx.fillStyle = wcol;
-        ctx.fillText(WEAPONS[p.weapon].name + ' LV' + p.level, W / 2, H - 30);
+        ctx.fillText(WEAPONS[p.weapon].name + ' LV' + p.level + (atCap ? ' · CAP' : ''), W / 2, H - 30);
         this.noGlow(ctx);
-        // level pips
+        // level pips: filled = earned, outline = available now, dark = locked
+        // until later stages (clear stages to raise the cap)
         for (let i = 0; i < WEAPONS[p.weapon].maxLv; i++) {
-          ctx.fillStyle = i < p.level ? wcol : 'rgba(255,255,255,0.15)';
-          ctx.fillRect(W / 2 - 36 + i * 12, H - 14, 9, 4);
+          const x = W / 2 - 36 + i * 12;
+          if (i < p.level) { ctx.fillStyle = wcol; ctx.fillRect(x, H - 14, 9, 4); }
+          else if (i < cap) { ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(x, H - 14, 9, 4); }
+          else { ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(x, H - 14, 9, 4); ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, H - 13.5, 8, 3); }
         }
       }
 
