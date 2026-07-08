@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stellar Shooter - Vertical Arcade Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="hud">
+            <div id="score">Score: 0</div>
+            <div id="health">HP: 100</div>
+            <div id="wave">Wave: 1</div>
+            <div id="weapons">
+                <div class="weapon-info active" data-weapon="1">
+                    <span class="weapon-name">Laser</span>
+                    <span class="weapon-level">Lv1</span>
+                </div>
+                <div class="weapon-info" data-weapon="2">
+                    <span class="weapon-name">Spread</span>
+                    <span class="weapon-level">Lv0</span>
+                </div>
+                <div class="weapon-info" data-weapon="3">
+                    <span class="weapon-name">Missile</span>
+                    <span class="weapon-level">Lv0</span>
+                </div>
+            </div>
+        </div>
+        <div id="gameOverScreen" class="hidden">
+            <div id="gameOverContent">
+                <h1>GAME OVER</h1>
+                <div id="finalScore"></div>
+                <div id="finalWave"></div>
+                <div id="finalStats"></div>
+                <button id="restartBtn">PLAY AGAIN</button>
+            </div>
+        </div>
+        <div id="startScreen">
+            <div id="startContent">
+                <h1>STELLAR SHOOTER</h1>
+                <p>Defend the cosmos from alien invaders</p>
+                <div class="controls">
+                    <p><strong>Controls:</strong></p>
+                    <p>Mouse: Aim & Move | Click: Shoot</p>
+                    <p>1/2/3: Switch Weapon | Space: Auto-Fire Toggle</p>
+                </div>
+                <button id="startBtn">START GAME</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="particles.js"></script>
+    <script src="entities.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
