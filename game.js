@@ -244,8 +244,10 @@
         case 'spread': {
           p.fireCd = Math.max(0.11, 0.24 - lv * 0.014);
           const n = Math.min(3 + (lv - 1), 8);
-          const arc = 0.3 + n * 0.045;
-          const dmg = 1 + (lv - 1) * 0.14;
+          // tighter fan: higher levels add pellets without spraying so wide
+          // that single targets (bosses!) become unhittable
+          const arc = 0.26 + n * 0.028;
+          const dmg = 1 + (lv - 1) * 0.22;
           const r = 3.5 + lv * 0.35;
           for (let i = 0; i < n; i++) {
             const a = -Math.PI / 2 + (n === 1 ? 0 : (i / (n - 1) - 0.5) * arc);
@@ -264,8 +266,8 @@
           break;
         }
         case 'missile': {
-          p.fireCd = Math.max(0.16, 0.34 - lv * 0.022);
-          const dmg = 2 + lv * 0.6;
+          p.fireCd = Math.max(0.16, 0.34 - lv * 0.03);
+          const dmg = 2 + lv * 0.95;
           const r = 5 + lv * 0.4;
           const n = lv >= 3 ? 2 : 1;
           for (let i = 0; i < n; i++) {
@@ -915,6 +917,7 @@
         for (let j = this.enemies.length - 1; j >= 0; j--) {
           const e = this.enemies[j];
           if (e.y < -e.r) continue;
+          if (b.hitList && b.hitList.indexOf(e) !== -1) continue; // pierced through already — no re-hit "drilling"
           const rr = (b.r + e.r) * (b.r + e.r);
           if (dist2(b.x, b.y, e.x, e.y) < rr) {
             // splash damage
@@ -930,7 +933,7 @@
             this.sfx.play('hit');
             if (this.particles.length < 520)
               this.particles.push(part(b.x, b.y, rand(-60, 60), rand(-80, 0), 0.15, 2.5, '#ffffff', 'spark'));
-            if (b.pierce > 0) { b.pierce--; }
+            if (b.pierce > 0) { b.pierce--; (b.hitList = b.hitList || []).push(e); }
             else { this.bullets.splice(i, 1); }
             break;
           }
