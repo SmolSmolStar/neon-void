@@ -1444,7 +1444,7 @@
       ctx.globalAlpha = 0.5 + 0.5 * Math.sin(T * 5);
       ctx.font = 'bold 20px monospace';
       if (g.audioReady) { this.glow(ctx, '#7dff4d', 16); ctx.fillStyle = '#c8ffb0'; ctx.fillText(g.isTouch ? 'TAP TO LAUNCH' : 'PRESS SPACE TO LAUNCH', W / 2, 410); }
-      else { this.glow(ctx, '#ffd25a', 16); ctx.fillStyle = '#ffe98a'; ctx.fillText(g.isTouch ? '◈ TAP TO START ◈' : '◈ INSERT COIN ◈', W / 2, 410); }
+      else { this.glow(ctx, '#ffd25a', 16); ctx.fillStyle = '#ffe98a'; ctx.fillText(g.isTouch ? 'TAP TO START' : 'PRESS SPACE TO START', W / 2, 410); }
       this.noGlow(ctx); ctx.globalAlpha = 1;
       ctx.restore();
     },
