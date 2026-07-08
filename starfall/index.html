@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#05060f" />
+  <title>Starfall — a juicy vertical shooter</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      background: #04050c;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    #stage {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(1200px 800px at 50% -10%, #10193a 0%, #04050c 60%);
+    }
+    #game {
+      display: block;
+      border-radius: 14px;
+      box-shadow:
+        0 0 0 1px rgba(124,246,255,0.12),
+        0 20px 60px rgba(0,0,0,0.6),
+        0 0 80px rgba(124,246,255,0.08);
+      image-rendering: -webkit-optimize-contrast;
+      background: #05060f;
+      cursor: crosshair;
+    }
+    #hint {
+      position: fixed;
+      bottom: 8px;
+      width: 100%;
+      text-align: center;
+      color: rgba(160,185,220,0.4);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      pointer-events: none;
+    }
+    @media (max-width: 520px) { #hint { display: none; } }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="game" width="480" height="720" aria-label="Starfall game"></canvas>
+  </div>
+  <div id="hint">STARFALL · drag to fly &amp; fire · collect drops to power up</div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
