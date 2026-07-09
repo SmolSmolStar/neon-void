@@ -22,9 +22,10 @@
     border-radius: 4px;
     touch-action: none;
   }
-  /* On-screen bomb button (touch devices only). */
+  /* On-screen bomb button (touch devices only) — bottom-LEFT; the joystick
+     owns the bottom-right corner. */
   #nv-bomb-btn {
-    position: fixed; right: 18px; bottom: 22px; z-index: 70;
+    position: fixed; left: 18px; bottom: 22px; z-index: 70;
     width: 66px; height: 66px; border-radius: 50%;
     display: none; align-items: center; justify-content: center;
     font-family: monospace; font-size: 30px; color: #ffdf9a;
@@ -34,7 +35,25 @@
     touch-action: none; -webkit-tap-highlight-color: transparent;
   }
   #nv-bomb-btn:active { background: radial-gradient(circle at 50% 40%, rgba(255,184,77,0.5), rgba(255,140,60,0.2)); }
-  @media (hover: none) and (pointer: coarse) { #nv-bomb-btn { display: flex; } }
+  /* Corner joystick (touch devices only): thumb rests here instead of on the ship. */
+  #nv-stick {
+    position: fixed; right: 14px; bottom: 16px; z-index: 70;
+    width: 124px; height: 124px; border-radius: 50%;
+    display: none;
+    background: radial-gradient(circle, rgba(77,243,255,0.08), rgba(77,243,255,0.02) 70%);
+    border: 2px solid rgba(77,243,255,0.35);
+    box-shadow: 0 0 18px rgba(77,243,255,0.15), inset 0 0 24px rgba(77,243,255,0.06);
+    touch-action: none; -webkit-tap-highlight-color: transparent;
+  }
+  #nv-stick .knob {
+    position: absolute; left: 50%; top: 50%; margin: -24px 0 0 -24px;
+    width: 48px; height: 48px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 40%, rgba(77,243,255,0.45), rgba(77,243,255,0.12));
+    border: 2px solid rgba(77,243,255,0.8);
+    box-shadow: 0 0 16px rgba(77,243,255,0.4);
+    pointer-events: none;
+  }
+  @media (hover: none) and (pointer: coarse) { #nv-bomb-btn { display: flex; } #nv-stick { display: block; } }
   /* Rotate-to-portrait hint (touch + landscape only). */
   #nv-rotate {
     position: fixed; inset: 0; z-index: 90; display: none;
@@ -51,9 +70,10 @@
 <body>
 <canvas id="game" width="480" height="720"></canvas>
 <div id="nv-bomb-btn" aria-label="bomb">✸</div>
+<div id="nv-stick" aria-label="joystick"><div class="knob"></div></div>
 <div id="nv-rotate"><div class="ic">↻</div><div class="t1">ROTATE YOUR DEVICE</div><div class="t2">NEON VOID plays in portrait</div></div>
 <!-- ?v bumped on each deploy so browsers never serve a stale build -->
-<script src="game.js?v=51"></script>
-<script src="leaderboard.js?v=51"></script>
+<script src="game.js?v=52"></script>
+<script src="leaderboard.js?v=52"></script>
 </body>
 </html>

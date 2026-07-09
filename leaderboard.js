@@ -116,7 +116,7 @@
     { id: 'p:blaster', c: '#4df3ff', lb: 'B', nm: 'BLASTER', nt: 'rapid straight shots' },
     { id: 'p:missile', c: '#d08cff', lb: 'M', nm: 'MISSILE', nt: 'homing missiles' },
     { id: 'p:spread', c: '#ffd94d', lb: 'S', nm: 'SPREAD', nt: 'wide fan of shots' },
-    { id: 'p:laser', c: '#ff4df0', lb: 'L', nm: 'LASER', nt: 'piercing beam' },
+    { id: 'p:laser', c: '#ff4df0', lb: '‖', nm: 'LASER SWEEP', nt: 'clears a straight path for a few seconds' },
     { id: 'p:heal', c: '#7dff4d', lb: '+', nm: 'REPAIR', nt: 'restore hull' },
     { id: 'p:shield', c: '#4dc3ff', lb: '◈', nm: 'SHIELD', nt: 'absorb one hit' },
     { id: 'p:bomb', c: '#ffb84d', lb: '✸', nm: 'BOMB', nt: 'screen-clearing nova · press X' },
@@ -128,6 +128,7 @@
     if (kind === 'heal') return 'p:heal';
     if (kind === 'shield') return 'p:shield';
     if (kind === 'bomb') return 'p:bomb';
+    if (kind === 'laser') return 'p:laser';
     return null;
   }
 

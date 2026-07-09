@@ -17,10 +17,11 @@
   const TAU = Math.PI * 2;
 
   // ---------- weapon definitions ----------
+  // Three weapons. LASER is no longer a weapon — it's a pickup-triggered
+  // sweep beam (see updateBeam) that clears a straight path for ~2.5s.
   const WEAPONS = {
     blaster: { name: 'BLASTER', color: '#4df3ff', maxLv: 6 },
     spread:  { name: 'SPREAD',  color: '#ffd94d', maxLv: 6 },
-    laser:   { name: 'LASER',   color: '#ff4df0', maxLv: 6 },
     missile: { name: 'MISSILE', color: '#d08cff', maxLv: 6 },
   };
   const WEAPON_KEYS = Object.keys(WEAPONS);
@@ -74,7 +75,7 @@
       this.player = {
         x: W / 2, y: H - 90, r: 11, hp: 3, maxHp: 5, // start 3 hearts, heal up to 5
         shield: 0, inv: 0, fireCd: 0,
-        weapon: 'blaster', level: 1,
+        weapon: 'blaster', level: 1, beamT: 0,
         bombs: 3, alive: true, tilt: 0, engine: 0,
       };
       this.bullets = [];
@@ -229,6 +230,7 @@
       this.updateSpawning(dt);
       this.updateEnemies(dt);
       this.updateBullets(dt);
+      this.updateBeam(dt);
       this.updateDrops(dt);
       this.updateParticles(dt);
       this.updateCollisions();
@@ -258,9 +260,11 @@
         p.x = nx; p.y = ny;
       } else {
         const sp = 320;
-        let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-        let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
-        if (dx && dy) { dx *= 0.7071; dy *= 0.7071; }
+        // keys give ±1; the corner joystick feeds analog jx/jy in [-1, 1]
+        let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0) + (input.jx || 0);
+        let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0) + (input.jy || 0);
+        const mag = Math.hypot(dx, dy);
+        if (mag > 1) { dx /= mag; dy /= mag; }
         p.x = clamp(p.x + dx * sp * dt, p.r + 4, W - p.r - 4);
         p.y = clamp(p.y + dy * sp * dt, H * 0.35, H - p.r - 6);
         p.tilt = lerp(p.tilt, dx * 0.35, 1 - Math.pow(0.001, dt));
@@ -303,24 +307,27 @@
       // grow, and the bullet-count jumps stay as the big milestone moments.
       switch (p.weapon) {
         case 'blaster': {
+          // the improved Blaster (absorbed the old laser): point-defense
+          // stream — shots trade one-for-one with enemy bullets — and from
+          // lv5 the center barrel fires piercing slugs (the laser heritage)
           p.fireCd = Math.max(0.07, 0.16 - lv * 0.012);
           const dmg = 1 + (lv - 1) * 0.5;
           const r = 4 + lv * 0.5;
           const barrels = lv < 3 ? 1 : lv < 5 ? 2 : 3;
-          if (barrels === 1) B(p.x, p.y - 14, 0, -640, dmg, { r });
-          else if (barrels === 2) { B(p.x - 7, p.y - 10, 0, -650, dmg, { r }); B(p.x + 7, p.y - 10, 0, -650, dmg, { r }); }
-          else { B(p.x - 9, p.y - 8, 0, -660, dmg, { r }); B(p.x + 9, p.y - 8, 0, -660, dmg, { r }); B(p.x, p.y - 18, 0, -720, dmg + 1, { r: r + 1 }); }
+          if (barrels === 1) B(p.x, p.y - 14, 0, -640, dmg, { r, intercept: 1 });
+          else if (barrels === 2) { B(p.x - 7, p.y - 10, 0, -650, dmg, { r, intercept: 1 }); B(p.x + 7, p.y - 10, 0, -650, dmg, { r, intercept: 1 }); }
+          else { B(p.x - 9, p.y - 8, 0, -660, dmg, { r, intercept: 1 }); B(p.x + 9, p.y - 8, 0, -660, dmg, { r, intercept: 1 }); B(p.x, p.y - 18, 0, -780, dmg + 1, { r: r + 1, intercept: 1, pierce: 1, trail: true }); }
           this.sfx.play('shoot', lv);
           break;
         }
         case 'spread': {
-          p.fireCd = Math.max(0.11, 0.24 - lv * 0.014);
+          p.fireCd = Math.max(0.10, 0.24 - lv * 0.02);
           const n = Math.min(3 + (lv - 1), 8);
           // tighter fan: higher levels add pellets without spraying so wide
           // that single targets (bosses!) become unhittable
           const arc = 0.26 + n * 0.028;
-          const dmg = 1 + (lv - 1) * 0.22;
-          const r = 3.5 + lv * 0.35;
+          const dmg = 1 + (lv - 1) * 0.4;
+          const r = 3.5 + lv * 0.45;
           for (let i = 0; i < n; i++) {
             const a = -Math.PI / 2 + (n === 1 ? 0 : (i / (n - 1) - 0.5) * arc);
             B(p.x, p.y - 12, Math.cos(a) * 560, Math.sin(a) * 560, dmg, { r });
@@ -328,25 +335,25 @@
           this.sfx.play('shoot2', lv);
           break;
         }
-        case 'laser': {
-          p.fireCd = Math.max(0.05, 0.11 - lv * 0.008);
-          const dmg = 1 + lv * 0.4;
-          const r = 3 + lv * 0.4;
-          B(p.x, p.y - 18, 0, -980, dmg, { r, pierce: 1 + Math.floor(lv / 2), trail: true });
-          if (lv >= 4) { B(p.x - 10, p.y - 8, 0, -980, dmg * 0.6, { r: r * 0.8, pierce: 1, trail: true }); B(p.x + 10, p.y - 8, 0, -980, dmg * 0.6, { r: r * 0.8, pierce: 1, trail: true }); }
-          this.sfx.play('laser', lv);
-          break;
-        }
         case 'missile': {
-          p.fireCd = Math.max(0.16, 0.34 - lv * 0.03);
-          const dmg = 2 + lv * 0.95;
+          // homing frees ALL your attention for dodging — bot tests show that
+          // convenience is worth far more than DPS, so missiles are the slow
+          // tortoise: a deliberate launcher cadence (not a mulcher), slow
+          // flight so enemies get their first shot off, and bosses take
+          // visibly longer than the aimed guns
+          // NOTE: homing converts raw numbers to kills at ~100% efficiency
+          // (zero wasted shots, auto-targets the nearest = most dangerous
+          // enemy), so its raw DPS must sit FAR below the aimed weapons —
+          // "DPS parity" math always ends up overpowered in practice
+          p.fireCd = Math.max(0.28, 0.46 - lv * 0.03);
+          const dmg = 1 + lv * 0.6;
           const r = 5 + lv * 0.4;
           const n = lv >= 3 ? 2 : 1;
           for (let i = 0; i < n; i++) {
             const off = n === 1 ? 0 : (i === 0 ? -12 : 12);
-            B(p.x + off, p.y - 8, off * 8, -300, dmg, { r, homing: 3.2 + lv * 0.35, splash: 46 + lv * 4, trail: true });
+            B(p.x + off, p.y - 8, off * 8, -260, dmg, { r, homing: 3.2 + lv * 0.35, splash: 30 + lv * 2, trail: true });
           }
-          if (lv >= 5) B(p.x, p.y - 16, 0, -320, dmg, { r, homing: 4.2, splash: 46 + lv * 4, trail: true });
+          if (lv >= 5) B(p.x, p.y - 16, 0, -280, dmg, { r, homing: 4.2, splash: 30 + lv * 2, trail: true });
           this.sfx.play('missile', lv);
           break;
         }
@@ -551,7 +558,10 @@
       const cfg = BOSSES[(this.stage - 1) % STAGES];
       this.announce('!! ' + cfg.name + ' !!');
       this.sfx.play('boss');
-      const hp = Math.round((300 + this.stage * 230) * cfg.hpMul);
+      // -15% vs the original curve: heavy (uninterceptable) boss patterns and
+      // the slower weapon meta made fights drag — bosses should be a dramatic
+      // peak, not a wall (QA bots died 80% of the time at bosses before this)
+      const hp = Math.round((255 + this.stage * 196) * cfg.hpMul);
       const e = {
         type: 'boss', cfg, x: W / 2, y: -80, r: cfg.r,
         hp, maxHp: hp, color: cfg.color, score: 4000 + this.stage * 1200, dropChance: 1,
@@ -623,31 +633,36 @@
     enemyFire(e, d) {
       const p = this.player;
       const bs = 170 + d * 26; // bullet speed
-      const aimAt = (spread, speed) => {
+      // HEAVY shots (bigger, dark-cored) cannot be intercepted by the
+      // blaster's point-defense — they're what makes bottom-center camping
+      // lethal at every stage. Darter fire stays light/interceptable.
+      const aimAt = (spread, speed, heavy) => {
         const a = Math.atan2(p.y - e.y, p.x - e.x) + rand(-spread, spread);
-        this.ebullets.push({ x: e.x, y: e.y + e.r * 0.6, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, r: 5, color: '#ff7b7b' });
+        this.ebullets.push({ x: e.x, y: e.y + e.r * 0.6, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, r: heavy ? 6 : 5, heavy: !!heavy, color: heavy ? '#ff9b3d' : '#ff7b7b' });
       };
       switch (e.type) {
         case 'darter': e.fireT = rand(2.2, 3.6) / Math.sqrt(d); aimAt(0.15, bs); break;
-        case 'drone': e.fireT = rand(1.8, 3.2) / Math.sqrt(d); aimAt(0.1, bs); break;
+        // drones go heavy from stage 3 — stages 1-2 stay point-defense
+        // friendly for beginners (weavers/tanks keep camping dead from s2/s4)
+        case 'drone': e.fireT = rand(1.8, 3.2) / Math.sqrt(d); aimAt(0.1, bs, this.stage >= 3); break;
         case 'weaver':
           e.fireT = rand(2.4, 3.8) / Math.sqrt(d);
           for (let k = -1; k <= 1; k++) {
             const a = Math.PI / 2 + k * 0.35;
-            this.ebullets.push({ x: e.x, y: e.y + 8, vx: Math.cos(a) * bs * 0.9, vy: Math.sin(a) * bs * 0.9, r: 5, color: '#7bffd9' });
+            this.ebullets.push({ x: e.x, y: e.y + 8, vx: Math.cos(a) * bs * 0.9, vy: Math.sin(a) * bs * 0.9, r: 6, heavy: true, color: '#7bffd9' });
           }
           break;
         case 'splitter': e.fireT = 999; break;
         case 'shard': e.fireT = 999; break;
         case 'tank':
           e.fireT = rand(1.6, 2.6) / Math.sqrt(d);
-          aimAt(0.06, bs * 1.1); aimAt(0.3, bs * 0.9);
+          aimAt(0.06, bs * 1.1, true); aimAt(0.3, bs * 0.9, true);
           break;
         case 'boss': this.bossFire(e, d); break;
         case 'mini':
           e.fireT = rand(2.0, 3.0);
-          aimAt(0.06, bs * 0.95);
-          aimAt(0.32, bs * 0.85);
+          aimAt(0.06, bs * 0.95, true);
+          aimAt(0.32, bs * 0.85, true);
           break;
       }
     }
@@ -716,7 +731,10 @@
       const col = cfg.bullet || '#ff9b4d';
       const enr = 1 + e.enrage * 0.4;                 // faster when enraged
       const base = 150 + this.stage * 6 + d * 6;      // bullet speed (dodgeable)
-      const shoot = (a, s, r, c) => this.ebullets.push({ x: e.x, y: e.y + 6, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: r || 5, color: c || col });
+      // ALL boss fire is heavy (uninterceptable): point-defense is for trash
+      // swarms — a boss's pattern must be dodged, and without this the boss's
+      // own bullet spray would eat the blaster stream and stall the fight
+      const shoot = (a, s, r, c) => this.ebullets.push({ x: e.x, y: e.y + 6, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: r || 5, heavy: true, color: c || col });
       const aim = Math.atan2(p.y - e.y, p.x - e.x);
       switch (cfg.phases[e.atkIdx]) {
         case 'aimed':
@@ -754,7 +772,7 @@
         case 'twin': {
           e.fireT = 0.13;
           const a = Math.PI / 2 + Math.sin(e.t * 2.4) * 0.85;
-          for (const s of [-1, 1]) this.ebullets.push({ x: e.x + s * (e.r * 0.6), y: e.y + 16, vx: Math.cos(a) * base, vy: Math.sin(a) * base, r: 4.5, color: col });
+          for (const s of [-1, 1]) this.ebullets.push({ x: e.x + s * (e.r * 0.6), y: e.y + 16, vx: Math.cos(a) * base, vy: Math.sin(a) * base, r: 4.5, heavy: true, color: col });
           break;
         }
         case 'cross': {
@@ -777,7 +795,7 @@
           for (let i = 0; i < n; i++) {
             if (i === gap || i === gap + 1) continue; // a safe lane to slide into
             const bx = 24 + (i / (n - 1)) * (W - 48);
-            this.ebullets.push({ x: bx, y: e.y, vx: 0, vy: base * 0.72, r: 5, color: col });
+            this.ebullets.push({ x: bx, y: e.y, vx: 0, vy: base * 0.72, r: 5, heavy: true, color: col });
           }
           break;
         }
@@ -861,7 +879,7 @@
         // escorts drop supportive items only — a lifeline mid-boss-fight,
         // never a weapon chip that baits you into switching off your build
         const roll = Math.random();
-        this.drops.push({ x: e.x, y: e.y, vy: 60, kind: roll < 0.45 ? 'heal' : roll < 0.75 ? 'shield' : 'bomb', t: 0, r: 12 });
+        this.drops.push({ x: e.x, y: e.y, vy: 60, kind: roll < 0.42 ? 'heal' : roll < 0.68 ? 'shield' : roll < 0.92 ? 'laser' : 'bomb', t: 0, r: 12 });
       } else if (Math.random() < e.dropChance || this.killsSinceDrop >= 6) {
         this.spawnDrop(e.x, e.y, false);
         this.killsSinceDrop = 0;
@@ -887,7 +905,7 @@
         // Mild bias toward the current weapon (steady leveling) while keeping
         // real variety — other weapons appear often enough to plan switches.
         let w;
-        if (Math.random() < 0.4) w = this.player.weapon;
+        if (Math.random() < 0.55) w = this.player.weapon;
         else { const others = WEAPON_KEYS.filter((k) => k !== this.player.weapon); w = others[randi(0, others.length - 1)]; }
         // anti-streak: never the same weapon chip three times in a row
         if (w === this._chip1 && w === this._chip2) {
@@ -896,9 +914,15 @@
         }
         this._chip2 = this._chip1; this._chip1 = w;
         kind = 'weapon:' + w;
-      } else if (roll < 0.78) kind = 'heal';
-      else if (roll < 0.9) kind = 'shield';
-      else kind = 'bomb';
+      } else if (roll < 0.76) kind = 'heal';
+      else if (roll < 0.86) kind = 'shield';
+      else if (roll < 0.96) {
+        // sweep beam fires on grab — never offer one right before/during a
+        // boss (it would either fizzle on an empty screen or trivialize the
+        // boss's opening); those rolls become shields instead
+        const bossSoon = this.bossActive || (this.wave >= WAVES_PER_STAGE && this.waveT > 4);
+        kind = bossSoon ? 'shield' : 'laser';
+      } else kind = 'bomb'; // rarest — the bomb clears the WHOLE screen, heavy shots included
       this.drops.push({ x, y, vy: 60, kind, t: 0, r: 12 });
     }
 
@@ -914,11 +938,19 @@
         // even in late-stage bullet storms. Never relentless.
         d.magT = d.magT || 0;
         const dNow = dist2(d.x, d.y, p.x, p.y);
-        if (p.alive && d.magT < 1.8 && dNow < 120 * 120) {
-          d.magT += (d.pd != null && dNow > d.pd) ? dt * 4 : dt;
+        // Chip-kiting micromechanic: every chip chases, but chips you always
+        // want (your weapon's + utility) are keen — unwanted weapon chips are
+        // lazy (slower, shorter budget) and a brief pull-away drains them 6x,
+        // permanently dumping one in ~0.2s. Steering which chips reach you
+        // stays a skill; accidental weapon switches stay rare.
+        const wanted = !d.kind.startsWith('weapon:') || d.kind.slice(7) === p.weapon;
+        const budget = wanted ? 1.8 : 1.1;
+        const spd = wanted ? 260 : 210;
+        if (p.alive && d.magT < budget && dNow < 120 * 120) {
+          d.magT += (d.pd != null && dNow > d.pd) ? dt * (wanted ? 4 : 6) : dt;
           const a = Math.atan2(p.y - d.y, p.x - d.x);
-          d.x += Math.cos(a) * 260 * dt;
-          d.y += Math.sin(a) * 260 * dt;
+          d.x += Math.cos(a) * spd * dt;
+          d.y += Math.sin(a) * spd * dt;
         } else {
           d.y += d.vy * dt;
           d.x += Math.sin(d.t * 3) * 20 * dt;
@@ -991,9 +1023,43 @@
         label = before === p.bombs ? 'BOMB FULL' : 'BOMB x' + p.bombs;
         color = '#ffb84d';
         this.sfx.play('powerup');
+      } else if (d.kind === 'laser') {
+        // sweep beam: fires immediately — a vertical column of destruction
+        // that clears a straight path (bullets included) for ~2.5s
+        p.beamT = Math.min(5, p.beamT + 2.5);
+        label = 'LASER SWEEP!';
+        color = '#ff4df0';
+        this.flash = Math.max(this.flash, 0.4);
+        this.shake = Math.max(this.shake, 6);
+        this.sfx.play('beam');
       }
       this.floaters.push({ x: p.x, y: p.y - 26, text: label, t: 1.1, color });
       this.burst(p.x, p.y, 12, color);
+    }
+
+    // ---------- laser sweep beam ----------
+    // A hot column above the ship: melts enemies, vaporizes enemy bullets.
+    // DPS scales with stage so the pickup stays relevant into endless.
+    updateBeam(dt) {
+      const p = this.player;
+      if (!p.alive || p.beamT <= 0) return;
+      p.beamT = Math.max(0, p.beamT - dt);
+      const half = 26;
+      const dps = 60 + 12 * this.stage;
+      for (let i = this.enemies.length - 1; i >= 0; i--) {
+        const e = this.enemies[i];
+        if (e.y < p.y && Math.abs(e.x - p.x) < half + e.r * 0.6) this.damageEnemy(e, dps * dt, true);
+      }
+      for (let i = this.ebullets.length - 1; i >= 0; i--) {
+        const b = this.ebullets[i];
+        if (b.y < p.y && Math.abs(b.x - p.x) < half + b.r) {
+          this.ebullets.splice(i, 1);
+          if (this.particles.length < 520)
+            this.particles.push(part(b.x, b.y, rand(-60, 60), rand(-40, 40), 0.15, 2.2, '#ff4df0', 'spark'));
+        }
+      }
+      if (this.particles.length < 480)
+        this.particles.push(part(p.x + rand(-half, half), rand(30, p.y - 30), rand(-15, 15), rand(-260, -140), 0.22, rand(1.5, 3), '#ff4df0', 'spark'));
     }
 
     // ---------- bullets ----------
@@ -1031,7 +1097,9 @@
             while (da > Math.PI) da -= TAU;
             while (da < -Math.PI) da += TAU;
             const na = cur + clamp(da, -b.homing * dt, b.homing * dt);
-            const sp = Math.min(560, Math.hypot(b.vx, b.vy) + 700 * dt);
+            // slower flight: enemies get their first shot off before dying —
+            // homing safety shouldn't also mean total suppression
+            const sp = Math.min(420, Math.hypot(b.vx, b.vy) + 470 * dt);
             b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp;
           }
         }
@@ -1070,12 +1138,32 @@
               this.burst(b.x, b.y, 10, '#ffb84d');
             }
             this.damageEnemy(e, b.dmg);
+            // railgun bolts stagger small enemies backward — the laser player
+            // buys space with every hit
+            if (b.knock && e.type !== 'boss' && e.type !== 'mini') e.y -= b.knock;
             this.sfx.play('hit');
             if (this.particles.length < 520)
               this.particles.push(part(b.x, b.y, rand(-60, 60), rand(-80, 0), 0.15, 2.5, '#ffffff', 'spark'));
             if (b.pierce > 0) { b.pierce--; (b.hitList = b.hitList || []).push(e); }
             else { this.bullets.splice(i, 1); }
             break;
+          }
+        }
+      }
+      // point-defense: blaster shots trade one-for-one with enemy bullets
+      // (screening a lane costs the damage those shots would do); railgun
+      // bolts (intercept 2) vaporize every bullet in their lane and keep going
+      for (let i = this.bullets.length - 1; i >= 0; i--) {
+        const b = this.bullets[i];
+        if (!b.intercept) continue;
+        for (let j = this.ebullets.length - 1; j >= 0; j--) {
+          const eb = this.ebullets[j];
+          if (eb.heavy) continue; // heavy shots punch straight through the screen
+          if (dist2(b.x, b.y, eb.x, eb.y) < (b.r + eb.r + 2) * (b.r + eb.r + 2)) {
+            this.ebullets.splice(j, 1);
+            if (this.particles.length < 520)
+              this.particles.push(part(eb.x, eb.y, rand(-50, 50), rand(-50, 50), 0.16, 2.2, '#bfefff', 'spark'));
+            if (b.intercept !== 2) { this.bullets.splice(i, 1); break; }
           }
         }
       }
@@ -1198,6 +1286,7 @@
       this.drawEnemies(ctx, g);
       this.drawParticles(ctx, g);
       this.drawBullets(ctx, g);
+      if (g.player.alive && g.state === 'play' && g.player.beamT > 0) this.drawBeam(ctx, g);
       if (g.player.alive && (g.state === 'play' || g.state === 'victory')) this.drawPlayer(ctx, g);
       this.drawFloaters(ctx, g);
 
@@ -1217,6 +1306,44 @@
 
     glow(ctx, color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur; },
     noGlow(ctx) { ctx.shadowBlur = 0; },
+
+    // Pre-rendered glow sprites. Setting shadowBlur per entity murders canvas
+    // perf (especially Safari) once bullet counts climb at high stages; baking
+    // each bullet/particle look into an offscreen canvas once and blitting it
+    // with drawImage keeps the exact same pixels at a fraction of the cost.
+    _spr: {},
+    sprite(key, size, draw) {
+      let s = this._spr[key];
+      if (s === undefined) {
+        try {
+          const c = document.createElement('canvas');
+          c.width = c.height = Math.ceil(size);
+          const x = c.getContext('2d');
+          x.translate(c.width / 2, c.height / 2);
+          draw(x);
+          s = c;
+        } catch (e) { s = null; }  // no DOM (Node tests) → vector fallback
+        this._spr[key] = s;
+      }
+      return s;
+    },
+
+    drawBeam(ctx, g) {
+      const p = g.player;
+      // fade in fast, fade out over the last 0.4s
+      const k = Math.min(1, p.beamT / 0.4) * (0.75 + Math.sin(g.time * 40) * 0.25);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const grad = ctx.createLinearGradient(p.x - 30, 0, p.x + 30, 0);
+      grad.addColorStop(0, 'rgba(255,77,240,0)');
+      grad.addColorStop(0.5, 'rgba(255,77,240,' + (0.34 * k).toFixed(3) + ')');
+      grad.addColorStop(1, 'rgba(255,77,240,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(p.x - 30, 0, 60, p.y - 12);
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.5 * k).toFixed(3) + ')';
+      ctx.fillRect(p.x - 5, 0, 10, p.y - 12);
+      ctx.restore();
+    },
 
     drawPlayer(ctx, g) {
       const p = g.player;
@@ -1288,64 +1415,92 @@
       }
     },
 
+    // Unrotated small-enemy shape at the origin (rotation is applied by the
+    // caller) — shared by the sprite baker and the no-DOM vector fallback.
+    _paintEnemy(ctx, type, color, flash) {
+      ctx.shadowColor = color; ctx.shadowBlur = 14;
+      ctx.fillStyle = flash ? '#ffffff' : color;
+      switch (type) {
+        case 'darter':
+          ctx.beginPath();
+          ctx.moveTo(0, 14); ctx.lineTo(-10, -8); ctx.lineTo(0, -3); ctx.lineTo(10, -8);
+          ctx.closePath(); ctx.fill();
+          break;
+        case 'drone':
+          ctx.beginPath();
+          for (let k = 0; k < 6; k++) {
+            const a = (k / 6) * TAU;
+            const r = k % 2 ? 8 : 15;
+            ctx[k ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r);
+          }
+          ctx.closePath(); ctx.fill();
+          break;
+        case 'weaver':
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 16, 9, 0, 0, TAU);
+          ctx.fill();
+          ctx.fillStyle = flash ? '#fff' : '#0a3f30';
+          ctx.beginPath(); ctx.arc(0, 0, 4, 0, TAU); ctx.fill();
+          break;
+        case 'splitter':
+          ctx.beginPath();
+          ctx.rect(-12, -12, 24, 24);
+          ctx.fill();
+          ctx.fillStyle = flash ? '#fff' : '#7a2054';
+          ctx.beginPath(); ctx.rect(-5, -5, 10, 10); ctx.fill();
+          break;
+        case 'shard':
+          ctx.beginPath();
+          ctx.moveTo(0, -9); ctx.lineTo(6, 5); ctx.lineTo(-6, 5);
+          ctx.closePath(); ctx.fill();
+          break;
+        case 'tank':
+          ctx.beginPath();
+          for (let k = 0; k < 8; k++) {
+            const a = (k / 8) * TAU + Math.PI / 8;
+            ctx[k ? 'lineTo' : 'moveTo'](Math.cos(a) * 24, Math.sin(a) * 24);
+          }
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle = flash ? '#fff' : '#4a2a80';
+          ctx.beginPath(); ctx.arc(0, 0, 11, 0, TAU); ctx.fill();
+          ctx.fillStyle = flash ? '#fff' : color;
+          ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.fill();
+          break;
+      }
+    },
+    _enemyRot(e) {
+      switch (e.type) {
+        case 'darter': return Math.sin(e.t * 2.2) * 0.3;
+        case 'drone': return e.t * 2;
+        case 'weaver': return Math.sin(e.t * 3) * 0.4;
+        case 'splitter': return e.t * 1.4;
+        case 'shard': return e.t * 6;
+        default: return 0;
+      }
+    },
+
     drawEnemies(ctx, g) {
+      const SMALL = { darter: 64, drone: 64, weaver: 64, splitter: 64, shard: 48, tank: 80 };
       for (const e of g.enemies) {
         ctx.save();
         ctx.translate(e.x, e.y);
         const flash = e.hitT > 0;
+
+        if (SMALL[e.type]) {
+          const rot = this._enemyRot(e);
+          if (rot) ctx.rotate(rot);
+          const s = this.sprite('en|' + e.type + '|' + e.color + '|' + (flash ? 1 : 0), SMALL[e.type],
+            (x) => this._paintEnemy(x, e.type, e.color, flash));
+          if (s) ctx.drawImage(s, -s.width / 2, -s.height / 2);
+          else { this._paintEnemy(ctx, e.type, e.color, flash); this.noGlow(ctx); }
+          ctx.restore();
+          this._drawEnemyHpBar(ctx, e);
+          continue;
+        }
+
         this.glow(ctx, e.color, 14);
         ctx.fillStyle = flash ? '#ffffff' : e.color;
-
         switch (e.type) {
-          case 'darter':
-            ctx.rotate(Math.sin(e.t * 2.2) * 0.3);
-            ctx.beginPath();
-            ctx.moveTo(0, 14); ctx.lineTo(-10, -8); ctx.lineTo(0, -3); ctx.lineTo(10, -8);
-            ctx.closePath(); ctx.fill();
-            break;
-          case 'drone':
-            ctx.rotate(e.t * 2);
-            ctx.beginPath();
-            for (let k = 0; k < 6; k++) {
-              const a = (k / 6) * TAU;
-              const r = k % 2 ? 8 : 15;
-              ctx[k ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r);
-            }
-            ctx.closePath(); ctx.fill();
-            break;
-          case 'weaver':
-            ctx.beginPath();
-            ctx.ellipse(0, 0, 16, 9, Math.sin(e.t * 3) * 0.4, 0, TAU);
-            ctx.fill();
-            ctx.fillStyle = flash ? '#fff' : '#0a3f30';
-            ctx.beginPath(); ctx.arc(0, 0, 4, 0, TAU); ctx.fill();
-            break;
-          case 'splitter':
-            ctx.rotate(e.t * 1.4);
-            ctx.beginPath();
-            ctx.rect(-12, -12, 24, 24);
-            ctx.fill();
-            ctx.fillStyle = flash ? '#fff' : '#7a2054';
-            ctx.beginPath(); ctx.rect(-5, -5, 10, 10); ctx.fill();
-            break;
-          case 'shard':
-            ctx.rotate(e.t * 6);
-            ctx.beginPath();
-            ctx.moveTo(0, -9); ctx.lineTo(6, 5); ctx.lineTo(-6, 5);
-            ctx.closePath(); ctx.fill();
-            break;
-          case 'tank':
-            ctx.beginPath();
-            for (let k = 0; k < 8; k++) {
-              const a = (k / 8) * TAU + Math.PI / 8;
-              ctx[k ? 'lineTo' : 'moveTo'](Math.cos(a) * 24, Math.sin(a) * 24);
-            }
-            ctx.closePath(); ctx.fill();
-            ctx.fillStyle = flash ? '#fff' : '#4a2a80';
-            ctx.beginPath(); ctx.arc(0, 0, 11, 0, TAU); ctx.fill();
-            ctx.fillStyle = flash ? '#fff' : e.color;
-            ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.fill();
-            break;
           case 'mini': {
             // a pocket dreadnought — same hull silhouette, half scale
             ctx.rotate(Math.sin(e.t * 1.1) * 0.08);
@@ -1404,16 +1559,19 @@
         }
         this.noGlow(ctx);
         ctx.restore();
+        this._drawEnemyHpBar(ctx, e);
+      }
+    },
 
-        // health bar for tanks + minis (boss uses the big top bar)
-        if ((e.type === 'tank' || e.type === 'mini') && e.hp < e.maxHp) {
-          const w = 40;
-          const frac = clamp(e.hp / e.maxHp, 0, 1);
-          ctx.fillStyle = 'rgba(0,0,0,0.5)';
-          ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w, 5);
-          ctx.fillStyle = frac > 0.4 ? '#ff5a5a' : '#ffd25a';
-          ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w * frac, 5);
-        }
+    // health bar for tanks + minis (boss uses the big top bar)
+    _drawEnemyHpBar(ctx, e) {
+      if ((e.type === 'tank' || e.type === 'mini') && e.hp < e.maxHp) {
+        const w = 40;
+        const frac = clamp(e.hp / e.maxHp, 0, 1);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w, 5);
+        ctx.fillStyle = frac > 0.4 ? '#ff5a5a' : '#ffd25a';
+        ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w * frac, 5);
       }
     },
 
@@ -1421,26 +1579,66 @@
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       for (const b of g.bullets) {
-        this.glow(ctx, b.color, 12);
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.ellipse(b.x, b.y, b.r * 0.8, b.r * 1.8, Math.atan2(b.vy, b.vx) + Math.PI / 2, 0, TAU);
-        ctx.fill();
-        ctx.fillStyle = b.color;
-        ctx.globalAlpha = 0.55;
-        ctx.beginPath();
-        ctx.ellipse(b.x, b.y, b.r * 1.6, b.r * 2.8, Math.atan2(b.vy, b.vx) + Math.PI / 2, 0, TAU);
-        ctx.fill();
-        ctx.globalAlpha = 1;
+        const rr = Math.round(b.r * 2) / 2;
+        const s = this.sprite('pb|' + b.color + '|' + rr, (rr * 2.8 + 14) * 2, (x) => {
+          x.shadowColor = b.color; x.shadowBlur = 12;
+          x.fillStyle = '#ffffff';
+          x.beginPath(); x.ellipse(0, 0, rr * 0.8, rr * 1.8, 0, 0, TAU); x.fill();
+          x.fillStyle = b.color;
+          x.globalAlpha = 0.55;
+          x.beginPath(); x.ellipse(0, 0, rr * 1.6, rr * 2.8, 0, 0, TAU); x.fill();
+        });
+        if (s) {
+          const h = s.width / 2;
+          if (b.vx > -1 && b.vx < 1) ctx.drawImage(s, b.x - h, b.y - h); // straight up — no transform
+          else {
+            ctx.translate(b.x, b.y); ctx.rotate(Math.atan2(b.vy, b.vx) + Math.PI / 2);
+            ctx.drawImage(s, -h, -h);
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+          }
+        } else {
+          this.glow(ctx, b.color, 12);
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.ellipse(b.x, b.y, b.r * 0.8, b.r * 1.8, Math.atan2(b.vy, b.vx) + Math.PI / 2, 0, TAU);
+          ctx.fill();
+          ctx.fillStyle = b.color;
+          ctx.globalAlpha = 0.55;
+          ctx.beginPath();
+          ctx.ellipse(b.x, b.y, b.r * 1.6, b.r * 2.8, Math.atan2(b.vy, b.vx) + Math.PI / 2, 0, TAU);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          this.noGlow(ctx);
+        }
       }
       for (const b of g.ebullets) {
-        this.glow(ctx, b.color, 10);
-        ctx.fillStyle = b.color;
-        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.45, 0, TAU); ctx.fill();
+        const rr = Math.round(b.r * 2) / 2;
+        // heavy shots read differently on sight: dark core + bright ring
+        // (they punch through point-defense, so the player must dodge)
+        const s = this.sprite('eb|' + b.color + '|' + rr + (b.heavy ? '|H' : ''), (rr + 12) * 2, (x) => {
+          x.shadowColor = b.color; x.shadowBlur = 10;
+          x.fillStyle = b.color;
+          x.beginPath(); x.arc(0, 0, rr, 0, TAU); x.fill();
+          if (b.heavy) {
+            x.fillStyle = '#1c0a24';
+            x.beginPath(); x.arc(0, 0, rr * 0.6, 0, TAU); x.fill();
+            x.strokeStyle = '#ffffff'; x.lineWidth = 1.4;
+            x.beginPath(); x.arc(0, 0, rr * 0.6, 0, TAU); x.stroke();
+          } else {
+            x.fillStyle = '#fff';
+            x.beginPath(); x.arc(0, 0, rr * 0.45, 0, TAU); x.fill();
+          }
+        });
+        if (s) { const h = s.width / 2; ctx.drawImage(s, b.x - h, b.y - h); }
+        else {
+          this.glow(ctx, b.color, 10);
+          ctx.fillStyle = b.color;
+          ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.45, 0, TAU); ctx.fill();
+          this.noGlow(ctx);
+        }
       }
-      this.noGlow(ctx);
       ctx.restore();
     },
 
@@ -1448,29 +1646,43 @@
       for (const d of g.drops) {
         ctx.save();
         ctx.translate(d.x, d.y + Math.sin(d.t * 4) * 3);
-        let color = '#fff', label = '?';
         if (d.kind.startsWith('weapon:')) {
+          // weapons: diamond + full 3-letter tag — single letters were
+          // ambiguous on phones (S = spread or shield?)
           const w = d.kind.slice(7);
-          color = WEAPONS[w].color;
-          label = WEAPONS[w].name[0];
-        } else if (d.kind === 'heal') { color = '#7dff4d'; label = '+'; }
-        else if (d.kind === 'shield') { color = '#4dc3ff'; label = '◈'; }
-        else if (d.kind === 'bomb') { color = '#ffb84d'; label = '✸'; }
-
-        this.glow(ctx, color, 16);
-        ctx.rotate(Math.PI / 4);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2.5;
-        ctx.strokeRect(-9, -9, 18, 18);
-        ctx.fillStyle = 'rgba(10,10,30,0.85)';
-        ctx.fillRect(-9, -9, 18, 18);
-        ctx.rotate(-Math.PI / 4);
-        this.noGlow(ctx);
-        ctx.fillStyle = color;
-        ctx.font = 'bold 12px monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(label, 0, 1);
+          const color = WEAPONS[w].color;
+          this.glow(ctx, color, 16);
+          ctx.rotate(Math.PI / 4);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2.5;
+          ctx.strokeRect(-11, -11, 22, 22);
+          ctx.fillStyle = 'rgba(10,10,30,0.85)';
+          ctx.fillRect(-11, -11, 22, 22);
+          ctx.rotate(-Math.PI / 4);
+          this.noGlow(ctx);
+          ctx.fillStyle = color;
+          ctx.font = 'bold 8px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(WEAPONS[w].name.slice(0, 3), 0, 1);
+        } else {
+          // utility drops: circles — a different silhouette from weapons
+          let color = '#fff', label = '?';
+          if (d.kind === 'heal') { color = '#7dff4d'; label = '+'; }
+          else if (d.kind === 'shield') { color = '#4dc3ff'; label = '◈'; }
+          else if (d.kind === 'bomb') { color = '#ffb84d'; label = '✸'; }
+          else if (d.kind === 'laser') { color = '#ff4df0'; label = '‖'; }
+          this.glow(ctx, color, 16);
+          ctx.beginPath(); ctx.arc(0, 0, 12, 0, TAU);
+          ctx.fillStyle = 'rgba(10,10,30,0.85)'; ctx.fill();
+          ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.stroke();
+          this.noGlow(ctx);
+          ctx.fillStyle = color;
+          ctx.font = 'bold 12px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, 0, 1);
+        }
         ctx.restore();
       }
     },
@@ -1480,10 +1692,19 @@
       ctx.globalCompositeOperation = 'lighter';
       for (const pa of g.particles) {
         const a = clamp(pa.t / pa.maxT, 0, 1);
-        ctx.globalAlpha = a * 0.9;
-        ctx.fillStyle = pa.color;
         const r = pa.r * (pa.kind === 'trail' ? a : (0.5 + a * 0.6));
-        ctx.beginPath(); ctx.arc(pa.x, pa.y, r, 0, TAU); ctx.fill();
+        // scaled blit of a cached solid circle — hundreds of path fills per
+        // frame add up on weaker GPUs/Safari
+        const s = this.sprite('pa|' + pa.color, 32, (x) => {
+          x.fillStyle = pa.color;
+          x.beginPath(); x.arc(0, 0, 15, 0, TAU); x.fill();
+        });
+        ctx.globalAlpha = a * 0.9;
+        if (s) ctx.drawImage(s, pa.x - r, pa.y - r, r * 2, r * 2);
+        else {
+          ctx.fillStyle = pa.color;
+          ctx.beginPath(); ctx.arc(pa.x, pa.y, r, 0, TAU); ctx.fill();
+        }
       }
       ctx.globalAlpha = 1;
       ctx.restore();
@@ -1954,6 +2175,7 @@
         case 'shoot': this.tone(880 * pt, 0.07, 'square', 0.035, 0.5); break;
         case 'shoot2': this.tone(660 * pt, 0.09, 'sawtooth', 0.03, 0.55); break;
         case 'laser': this.tone(1400 * (1 + ((lv || 1) - 1) * 0.022), 0.06, 'sawtooth', 0.03, 0.3); break;
+        case 'beam': this.tone(2100, 0.9, 'sawtooth', 0.08, 0.22); this.tone(700, 0.9, 'sine', 0.06, 0.5); this.noise(0.5, 0.05); break;
         case 'missile': this.tone(300 * pt, 0.18, 'sawtooth', 0.045, 2.2); this.noise(0.1, 0.03); break;
         case 'levelup': { var lb = 1 + ((lv || 1) - 1) * 0.045; this.tone(660 * lb, 0.08, 'square', 0.06); this.tone(990 * lb, 0.1, 'square', 0.055, 1, 0.06); this.tone(1480 * lb, 0.16, 'triangle', 0.05, 1, 0.12); break; }
         case 'hit': this.tone(220, 0.05, 'square', 0.03, 0.7); break;
@@ -2011,6 +2233,15 @@
       const gn = this.ctx.createGain(); gn.gain.setValueAtTime(vol || 0.05, when); gn.gain.exponentialRampToValueAtTime(0.0001, when + 0.03);
       src.connect(hp); hp.connect(gn); gn.connect(this._mgain); src.start(when);
     }
+    _msnare(when, vol) {
+      if (!this.ctx || this.muted) return;
+      const n = Math.floor(this.ctx.sampleRate * 0.09), buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate), ch = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      const src = this.ctx.createBufferSource(); src.buffer = buf;
+      const bp = this.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1900; bp.Q.value = 0.9;
+      const gn = this.ctx.createGain(); gn.gain.setValueAtTime(vol || 0.09, when); gn.gain.exponentialRampToValueAtTime(0.0001, when + 0.09);
+      src.connect(bp); bp.connect(gn); gn.connect(this._mgain); src.start(when);
+    }
     startMusic(mode) {
       this.ensure();
       if (!this.ctx) return;
@@ -2029,23 +2260,46 @@
       const game = this.musicMode === 'game' || boss;
       const bpm = boss ? 172 : game ? 148 : 118;
       const step = 60 / bpm / 4; // 16th notes
-      const prog = boss
-        ? [[110, 1], [116.541, 0], [110, 1], [82.407, 0]]     // Am · B♭ · Am · E — urgent, Neapolitan dread
-        : game
-          ? [[110, 1], [97.999, 0], [87.307, 0], [82.407, 1]]   // Am · G · F · E(min)
-          : [[110, 1], [87.307, 0], [130.813, 0], [97.999, 0]]; // Am · F · C · G
+      // Song structure: gameplay cycles 8-bar sections A → B → A → C (~52s)
+      // instead of looping one 4-chord vamp — B lifts and adds a lead line,
+      // C opens as a halftime breather then builds back into A.
+      const section = boss ? 'X' : game ? 'ABAC'[Math.floor(this._bar / 8) % 4] : 'M';
+      const PROGS = {
+        X: [[110, 1], [116.541, 0], [110, 1], [82.407, 0]],     // Am · B♭ · Am · E — urgent, Neapolitan dread
+        A: [[110, 1], [97.999, 0], [87.307, 0], [82.407, 1]],   // Am · G · F · E(min)
+        B: [[87.307, 0], [97.999, 0], [110, 1], [82.407, 1]],   // F · G · Am · Em — the lift
+        C: [[110, 1], [87.307, 0], [130.813, 0], [97.999, 0]],  // Am · F · C · G — breather, then build
+        M: [[110, 1], [87.307, 0], [130.813, 0], [97.999, 0]],  // menu: Am · F · C · G
+      };
+      const prog = PROGS[section];
       const ch = prog[this._bar % prog.length], root = ch[0], min = ch[1];
       const third = root * (min ? 1.18921 : 1.259921), fifth = root * 1.498307;
-      const arp = [root * 2, third * 2, fifth * 2, third * 2, root * 2, fifth * 2, third * 4, fifth * 2];
+      const arpUp = [root * 2, third * 2, fifth * 2, third * 2, root * 2, fifth * 2, third * 4, fifth * 2];
+      const arpDn = [fifth * 4, third * 4, root * 4, fifth * 2, third * 4, root * 4, fifth * 2, third * 2];
+      const arp = section === 'B' ? arpDn : arpUp;
+      const barIn = this._bar % 8;                       // position inside the section
+      const calm = section === 'C' && barIn < 4;         // halftime breather
+      const build = section === 'C' && barIn >= 4;       // ...then rebuild toward A
+      const lead = section === 'B' || build;
+      // two alternating A-minor lead phrases (semitones above root×2)
+      const phrase = (barIn % 2) ? [15, 12, 10, 8, 10, 12, 8, 7] : [12, 10, 8, 7, 8, 10, 7, 5];
+      const st = (f, n) => f * Math.pow(2, n / 12);
       const t0 = this._barTime;
       for (let s = 0; s < 16; s++) {
         const when = t0 + s * step;
-        if (s % 4 === 0) { this._mnote(root, when, step * 3.4, 'sawtooth', boss ? 0.16 : 0.14, root * 0.98); this._mkick(when); }
+        if (s % 4 === 0) {
+          this._mnote(root, when, step * 3.4, 'sawtooth', boss ? 0.16 : calm ? 0.09 : 0.14, root * 0.98);
+          if (!calm || s % 8 === 0) this._mkick(when);   // halftime kick in the breather
+        }
         if (boss && s % 4 === 2) this._mkick(when); // double-time kick — heartbeat under pressure
-        if (boss ? true : s % 2 === 0) this._mnote(arp[(boss ? s : s / 2) % arp.length], when, step * (boss ? 0.9 : 1.5), 'square', boss ? 0.055 : game ? 0.06 : 0.05);
-        this._mhat(when, s % 2 ? (boss ? 0.07 : 0.05) : 0.03);
-        if (game && !boss && s % 8 === 4) this._mnote(root * 3, when, step * 2, 'triangle', 0.05);
+        if (game && !calm && (s === 4 || s === 12)) this._msnare(when, boss ? 0.11 : 0.09); // backbeat
+        if (!calm && (boss ? true : s % 2 === 0)) this._mnote(arp[(boss ? s : s / 2) % arp.length], when, step * (boss ? 0.9 : 1.5), 'square', boss ? 0.055 : game ? 0.06 : 0.05);
+        this._mhat(when, s % 2 ? (boss ? 0.07 : calm ? 0.035 : 0.05) : 0.03);
+        if (game && !boss && lead && s % 2 === 1) this._mnote(st(root * 2, phrase[(s - 1) / 2]), when, step * 1.8, 'triangle', 0.055);
+        if (game && !boss && section === 'A' && s % 8 === 4) this._mnote(root * 3, when, step * 2, 'triangle', 0.05);
+        if (game && !boss && barIn === 7 && s >= 12) this._msnare(when, 0.05 + (s - 12) * 0.02); // section-end fill
       }
+      if (calm) { this._mnote(root * 2, t0, step * 16, 'triangle', 0.05); this._mnote(fifth * 2, t0, step * 16, 'sine', 0.04); } // airy pad while the beat rests
       if (boss) this._mnote(root * 4, t0, step * 10, 'sawtooth', 0.045, root * 2.9); // descending siren wail each bar
       if (!game) { const mel = [fifth * 4, root * 4, third * 4, fifth * 4]; this._mnote(mel[this._bar % mel.length], t0 + step * 8, step * 6, 'triangle', 0.06); }
       this._bar++; this._barTime += step * 16;
@@ -2075,7 +2329,7 @@
       onWin() { try { localStorage.setItem('neonvoid_cleared', '1'); } catch (e) {} },
     });
 
-    const input = { left: false, right: false, up: false, down: false, fire: false, bomb: false, dragActive: false, tx: W / 2, ty: H - 90 };
+    const input = { left: false, right: false, up: false, down: false, fire: false, bomb: false, dragActive: false, tx: W / 2, ty: H - 90, jx: 0, jy: 0 };
     let paused = false, musicState = null, audioUnlocked = false, musicVol = 0.5, orientationBlocked = false;
     const isTouch = (typeof matchMedia !== 'undefined' && matchMedia('(hover: none) and (pointer: coarse)').matches) || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     game.audioReady = false;
@@ -2108,9 +2362,10 @@
           return;
         }
         if (game.state === 'play') {
-          const wkeys = { Digit1: 'blaster', Digit2: 'spread', Digit3: 'laser', Digit4: 'missile' };
+          const wkeys = { Digit1: 'blaster', Digit2: 'spread', Digit3: 'missile' };
           if (wkeys[ev.code]) { game.player.weapon = wkeys[ev.code]; game.usedCheats = true; return; }
           if (ev.code === 'KeyU') { game.player.level = Math.min(6, game.player.level + 1); game.usedCheats = true; return; }
+          if (ev.code === 'KeyL') { game.player.beamT = Math.min(5, game.player.beamT + 2.5); game.sfx.play('beam'); game.usedCheats = true; return; }
           if (ev.code === 'KeyB' && !game.bossActive) { game.spawnBoss(); game.usedCheats = true; return; }
           if (ev.code === 'KeyH') { game.player.hp = game.player.maxHp; game.player.shield = 3; game.player.bombs = 5; game.usedCheats = true; return; }
         }
@@ -2162,6 +2417,42 @@
       bombBtn.addEventListener('pointercancel', bombUp);
     }
 
+    // Corner joystick (touch): thumb stays in the corner so it never covers
+    // the ship. Analog velocity control with a soft curve for fine dodging;
+    // holding it also auto-fires, like drag. Direct canvas drag still works.
+    const stick = document.getElementById('nv-stick');
+    const stickKnob = stick && stick.querySelector('.knob');
+    if (stick && stickKnob) {
+      const RANGE = 42; // px of knob travel = full speed
+      let stickId = null, scx = 0, scy = 0;
+      const applyStick = (e) => {
+        let dx = e.clientX - scx, dy = e.clientY - scy;
+        const m = Math.hypot(dx, dy);
+        const c = Math.min(m, RANGE);
+        const ux = m ? dx / m : 0, uy = m ? dy / m : 0;
+        stickKnob.style.transform = 'translate(' + (ux * c) + 'px,' + (uy * c) + 'px)';
+        const k = Math.pow(c / RANGE, 1.5); // response curve: precision near center
+        input.jx = ux * k; input.jy = uy * k;
+      };
+      stick.addEventListener('pointerdown', (e) => {
+        e.stopPropagation(); e.preventDefault(); unlock();
+        if (game.state === 'over') return;
+        const r = stick.getBoundingClientRect();
+        scx = r.left + r.width / 2; scy = r.top + r.height / 2;
+        stickId = e.pointerId; input.fire = true;
+        if (stick.setPointerCapture) { try { stick.setPointerCapture(e.pointerId); } catch (err) {} }
+        applyStick(e);
+      });
+      stick.addEventListener('pointermove', (e) => { if (e.pointerId === stickId) { applyStick(e); e.preventDefault(); } });
+      const stickUp = (e) => {
+        if (e.pointerId !== stickId) return;
+        stickId = null; input.jx = 0; input.jy = 0; input.fire = false;
+        stickKnob.style.transform = '';
+      };
+      stick.addEventListener('pointerup', stickUp);
+      stick.addEventListener('pointercancel', stickUp);
+    }
+
     // scale canvas to fit window while keeping aspect
     function fit() {
       const pad = 14;
@@ -2178,7 +2469,7 @@
     function checkOrientation() {
       orientationBlocked = !!(rotateMQ && rotateMQ.matches);
       game.orientationBlocked = orientationBlocked;
-      if (orientationBlocked) { for (const k in input) if (input[k] === true) input[k] = false; input.dragActive = false; }
+      if (orientationBlocked) { for (const k in input) if (input[k] === true) input[k] = false; input.dragActive = false; input.jx = 0; input.jy = 0; }
     }
     if (rotateMQ) { rotateMQ.addEventListener ? rotateMQ.addEventListener('change', checkOrientation) : rotateMQ.addListener(checkOrientation); }
     window.addEventListener('resize', checkOrientation);
