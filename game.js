@@ -1808,7 +1808,7 @@
           ctx.rotate(-Math.PI / 4);
           this.noGlow(ctx);
           ctx.fillStyle = color;
-          ctx.font = 'bold 8px monospace';
+          ctx.font = 'bold 9px monospace';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(WEAPONS[w].name.slice(0, 3), 0, 1);
@@ -1935,7 +1935,7 @@
         // is obvious how much health you have (and how many you can still gain).
         this.noGlow(ctx);
         ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-        ctx.font = 'bold 9px monospace';
+        ctx.font = 'bold 8px monospace';
         ctx.fillStyle = 'rgba(255,150,170,0.75)';
         ctx.fillText('HULL', 14, H - 40);
         for (let i = 0; i < p.maxHp; i++) {

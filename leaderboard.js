@@ -168,7 +168,7 @@
     else if (label === '+') { x.fillRect(-1.6, -5.5, 3.2, 11); x.fillRect(-5.5, -1.6, 11, 3.2); }
     else if (label === '◈') { x.save(); x.rotate(Math.PI / 4); x.strokeStyle = col; x.lineWidth = 1.9; x.strokeRect(-3.8, -3.8, 7.6, 7.6); x.fillRect(-1.6, -1.6, 3.2, 3.2); x.restore(); }
     else if (label === '✸') { x.strokeStyle = col; x.lineWidth = 2; x.lineCap = 'round'; for (var kk = 0; kk < 8; kk++) { var aa = (kk / 8) * TAU; x.beginPath(); x.moveTo(Math.cos(aa) * 1.7, Math.sin(aa) * 1.7); x.lineTo(Math.cos(aa) * 5.5, Math.sin(aa) * 5.5); x.stroke(); } x.beginPath(); x.arc(0, 0, 1.9, 0, TAU); x.fill(); }
-    else { x.font = 'bold ' + (label.length > 1 ? 6 : 11) + 'px monospace'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(label, 0, 0.5); }
+    else { x.font = 'bold ' + (label.length > 1 ? 7 : 11) + 'px monospace'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(label, 0, 0.5); }
     x.restore();
   }
   function drawLockedIcon(x) {
