@@ -21,7 +21,7 @@
   // sweep beam (see updateBeam) that clears a straight path for ~2.5s.
   const WEAPONS = {
     blaster: { name: 'BLASTER', color: '#4df3ff', maxLv: 6 },
-    spread:  { name: 'SPREAD',  color: '#ffd94d', maxLv: 6 },
+    spread:  { name: 'SPREAD',  color: '#eaff3d', maxLv: 6 },
     missile: { name: 'MISSILE', color: '#d08cff', maxLv: 6 },
   };
   const WEAPON_KEYS = Object.keys(WEAPONS);
@@ -32,10 +32,10 @@
     drone:   { hp: 3,  r: 15, score: 150, color: '#ffd25a', drop: 0.16 },
     weaver:  { hp: 4,  r: 16, score: 200, color: '#5affc8', drop: 0.18 },
     tank:    { hp: 14, r: 24, score: 400, color: '#b98cff', drop: 0.5 },
-    splitter:{ hp: 6,  r: 18, score: 250, color: '#ff8cd2', drop: 0.2 },
-    lancer:  { hp: 3,  r: 13, score: 220, color: '#ff9e4d', drop: 0.16 },
-    pulsar:  { hp: 9,  r: 18, score: 300, color: '#5a8cff', drop: 0.24 },
-    shard:   { hp: 1,  r: 9,  score: 50,  color: '#ff8cd2', drop: 0.05 },
+    splitter:{ hp: 6,  r: 18, score: 250, color: '#ff3d85', drop: 0.2 },
+    lancer:  { hp: 5,  r: 13, score: 240, color: '#ff9e4d', drop: 0.16 },  // bulky enough to usually live to its dash
+    pulsar:  { hp: 11, r: 18, score: 340, color: '#3d63ff', drop: 0.24 }, // near-tank: a priority target, not free score
+    shard:   { hp: 1,  r: 9,  score: 50,  color: '#ff3d85', drop: 0.05 },
     boss:    { hp: 320, r: 52, score: 5000, color: '#ff3b3b', drop: 1 },
   };
 
@@ -108,6 +108,7 @@
       this.hitstop = 0;
       this.flash = 0;
       this.banner = null; // {text, t}
+      this._bossWarned = false;
       this.overT = 0;
     }
 
@@ -433,6 +434,14 @@
     updateSpawning(dt) {
       const WAVE_DUR = 11; // seconds per wave; a stage = 5 waves + a boss
       this.waveT += dt;
+      // unmissable pre-boss warning: 1.5s before EVERY stage boss warps in
+      if (!this.bossActive && this.wave >= WAVES_PER_STAGE && !this._bossWarned && this.waveT > WAVE_DUR - 1.5) {
+        this._bossWarned = true;
+        // the classic dread banner — the boss's NAME, announced before it warps in
+        this.announce('!! ' + BOSSES[(this.stage - 1) % STAGES].name + ' !!');
+        this.sfx.play('boss');
+        this.flash = Math.max(this.flash, 0.25);
+      }
       if (!this.bossActive && this.waveT > WAVE_DUR) {
         this.waveT = 0;
         if (this.wave >= WAVES_PER_STAGE) {
@@ -593,8 +602,10 @@
 
     spawnBoss() {
       this.bossActive = true;
+      this._bossWarned = false; // re-arm the INBOUND warning for the next stage
       const cfg = BOSSES[(this.stage - 1) % STAGES];
-      this.announce('!! ' + cfg.name + ' !!');
+      // no name banner here — the ⚠ INBOUND warning already announced it, and
+      // the boss's name sits above its HP bar for the whole fight
       this.sfx.play('boss');
       // -15% vs the original curve: heavy (uninterceptable) boss patterns and
       // the slower weapon meta made fights drag — bosses should be a dramatic
@@ -709,10 +720,13 @@
         // friendly for beginners (weavers/tanks keep camping dead from s2/s4)
         case 'drone': e.fireT = rand(1.8, 3.2) / Math.sqrt(d); aimAt(0.1, bs, this.stage >= 3); break;
         case 'weaver':
+          // LIGHT 3-way fan (vaporisable): several weavers can rain a lot of
+          // bullets, so the player must be able to answer — point-defense
+          // carves through it; the fan is area denial, not a wall
           e.fireT = rand(2.4, 3.8) / Math.sqrt(d);
           for (let k = -1; k <= 1; k++) {
             const a = Math.PI / 2 + k * 0.35;
-            this.ebullets.push({ x: e.x, y: e.y + 8, vx: Math.cos(a) * bs * 0.9, vy: Math.sin(a) * bs * 0.9, r: 6, heavy: true, color: '#7bffd9' });
+            this.ebullets.push({ x: e.x, y: e.y + 8, vx: Math.cos(a) * bs * 0.9, vy: Math.sin(a) * bs * 0.9, r: 5, color: '#7bffd9' });
           }
           break;
         case 'splitter': e.fireT = 999; break;
@@ -1013,7 +1027,10 @@
         // boss (it would either fizzle on an empty screen or trivialize the
         // boss's opening); those rolls become shields instead
         const bossSoon = this.bossActive || (this.wave >= WAVES_PER_STAGE && this.waveT > 4);
-        kind = bossSoon ? 'shield' : 'laser';
+        // never two sweeps at once: if one is already falling (or the beam is
+        // firing), the roll becomes a shield — back-to-back sweep RNG helps no one
+        const laserBusy = this.player.beamT > 0 || this.drops.some((dd) => dd.kind === 'laser');
+        kind = (bossSoon || laserBusy) ? 'shield' : 'laser';
       } else kind = 'bomb'; // rarest — the bomb clears the WHOLE screen, heavy shots included
       this.drops.push({ x, y, vy: 60, kind, t: 0, r: 12 });
     }
@@ -1126,7 +1143,7 @@
         const before = p.bombs;
         p.bombs = Math.min(5, p.bombs + 1);
         label = before === p.bombs ? 'BOMB FULL' : 'BOMB x' + p.bombs;
-        color = '#ffb84d';
+        color = '#ffe3a1';
         this.sfx.play('powerup');
       } else if (d.kind === 'laser') {
         // sweep beam: fires immediately — a vertical column of destruction
@@ -1800,7 +1817,7 @@
           let color = '#fff', label = '?';
           if (d.kind === 'heal') { color = '#7dff4d'; label = '+'; }
           else if (d.kind === 'shield') { color = '#4dc3ff'; label = '◈'; }
-          else if (d.kind === 'bomb') { color = '#ffb84d'; label = '✸'; }
+          else if (d.kind === 'bomb') { color = '#ffe3a1'; label = '✸'; }
           else if (d.kind === 'laser') { color = '#ff4df0'; label = '‖'; }
           this.glow(ctx, color, 16);
           ctx.beginPath(); ctx.arc(0, 0, 12, 0, TAU);
@@ -1808,10 +1825,36 @@
           ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.stroke();
           this.noGlow(ctx);
           ctx.fillStyle = color;
-          ctx.font = 'bold 12px monospace';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(label, 0, 1);
+          // all glyphs drawn as bold geometry — font glyphs smear at mobile
+          // canvas scale (label kept only as a fallback)
+          if (d.kind === 'laser') {
+            ctx.fillRect(-4.5, -6.5, 3.2, 13);
+            ctx.fillRect(1.3, -6.5, 3.2, 13);
+          } else if (d.kind === 'heal') {
+            ctx.fillRect(-2, -7, 4, 14);
+            ctx.fillRect(-7, -2, 14, 4);
+          } else if (d.kind === 'shield') {
+            ctx.save(); ctx.rotate(Math.PI / 4);
+            ctx.strokeStyle = color; ctx.lineWidth = 2.4;
+            ctx.strokeRect(-4.8, -4.8, 9.6, 9.6);
+            ctx.fillRect(-2, -2, 4, 4);
+            ctx.restore();
+          } else if (d.kind === 'bomb') {
+            ctx.strokeStyle = color; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+            for (let k = 0; k < 8; k++) {
+              const a = (k / 8) * TAU;
+              ctx.beginPath();
+              ctx.moveTo(Math.cos(a) * 2.2, Math.sin(a) * 2.2);
+              ctx.lineTo(Math.cos(a) * 7, Math.sin(a) * 7);
+              ctx.stroke();
+            }
+            ctx.beginPath(); ctx.arc(0, 0, 2.4, 0, TAU); ctx.fill();
+          } else {
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, 0, 1);
+          }
         }
         ctx.restore();
       }

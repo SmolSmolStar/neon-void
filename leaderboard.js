@@ -106,22 +106,22 @@
     { id: 'e:darter', t: 'darter', c: '#ff5a5a', nm: 'DARTER', nt: 'fast, fragile diver' },
     { id: 'e:drone', t: 'drone', c: '#ffd25a', nm: 'DRONE', nt: 'spins in, fires bursts' },
     { id: 'e:weaver', t: 'weaver', c: '#5affc8', nm: 'WEAVER', nt: 'weaves side to side' },
-    { id: 'e:splitter', t: 'splitter', c: '#ff8cd2', nm: 'SPLITTER', nt: 'bursts into shards' },
-    { id: 'e:shard', t: 'shard', c: '#ff8cd2', nm: 'SHARD', nt: 'splinter from a splitter' },
+    { id: 'e:splitter', t: 'splitter', c: '#ff3d85', nm: 'SPLITTER', nt: 'bursts into shards' },
+    { id: 'e:shard', t: 'shard', c: '#ff3d85', nm: 'SHARD', nt: 'splinter from a splitter' },
     { id: 'e:tank', t: 'tank', c: '#b98cff', nm: 'TANK', nt: 'armored, high HP' },
-    { id: 'e:lancer', t: 'lancer', c: '#ff9e4d', nm: 'LANCER', nt: 'quivers, locks on, then dashes — sidestep the tell' },
-    { id: 'e:pulsar', t: 'pulsar', c: '#5a8cff', nm: 'PULSAR', nt: 'slow drifter, radial bullet burst' },
+    { id: 'e:lancer', t: 'lancer', c: '#ff9e4d', nm: 'LANCER', nt: 'quivers, locks on, then dashes at you' },
+    { id: 'e:pulsar', t: 'pulsar', c: '#3d63ff', nm: 'PULSAR', nt: 'slow drifter, radial bullet burst' },
     { id: 'e:mini', t: 'mini', c: '#ff6b6b', nm: 'MINI-DREADNOUGHT', nt: 'escort of the final boss' },
     { id: 'e:boss', t: 'boss', c: '#ff3b3b', nm: 'BOSS', nt: 'wave boss — massive HP' },
   ];
   var PICKUPS = [
-    { id: 'p:blaster', c: '#4df3ff', lb: 'B', nm: 'BLASTER', nt: 'rapid straight shots' },
-    { id: 'p:missile', c: '#d08cff', lb: 'M', nm: 'MISSILE', nt: 'homing missiles' },
-    { id: 'p:spread', c: '#ffd94d', lb: 'S', nm: 'SPREAD', nt: 'wide fan of shots' },
+    { id: 'p:blaster', c: '#4df3ff', lb: 'BLA', nm: 'BLASTER', nt: 'rapid straight shots' },
+    { id: 'p:missile', c: '#d08cff', lb: 'MIS', nm: 'MISSILE', nt: 'homing missiles' },
+    { id: 'p:spread', c: '#eaff3d', lb: 'SPR', nm: 'SPREAD', nt: 'wide fan of shots' },
     { id: 'p:laser', c: '#ff4df0', lb: '‖', nm: 'LASER SWEEP', nt: 'clears a straight path for a few seconds' },
     { id: 'p:heal', c: '#7dff4d', lb: '+', nm: 'REPAIR', nt: 'restore hull' },
     { id: 'p:shield', c: '#4dc3ff', lb: '◈', nm: 'SHIELD', nt: 'absorb one hit' },
-    { id: 'p:bomb', c: '#ffb84d', lb: '✸', nm: 'BOMB', nt: 'screen-clearing nova · press X' },
+    { id: 'p:bomb', c: '#ffe3a1', lb: '✸', nm: 'BOMB', nt: 'screen-clearing nova · press X' },
   ];
   var BY_ID = {}; ENEMIES.concat(PICKUPS).forEach(function (e) { BY_ID[e.id] = e; });
   function dropKindToId(kind) {
@@ -148,13 +148,28 @@
     else if (type === 'splitter') { s = 0.72; x.save(); x.rotate(0.5); x.fillRect(-12 * s, -12 * s, 24 * s, 24 * s); x.fillStyle = '#7a2054'; x.fillRect(-5 * s, -5 * s, 10 * s, 10 * s); x.restore(); }
     else if (type === 'shard') { s = 1.35; x.beginPath(); x.moveTo(0, -9 * s); x.lineTo(6 * s, 5 * s); x.lineTo(-6 * s, 5 * s); x.closePath(); x.fill(); }
     else if (type === 'tank') { s = 0.54; x.beginPath(); for (k = 0; k < 8; k++) { a = (k / 8) * TAU + Math.PI / 8; x[k ? 'lineTo' : 'moveTo'](Math.cos(a) * 24 * s, Math.sin(a) * 24 * s); } x.closePath(); x.fill(); x.fillStyle = '#4a2a80'; x.beginPath(); x.arc(0, 0, 11 * s, 0, TAU); x.fill(); x.fillStyle = col; x.beginPath(); x.arc(0, 0, 5 * s, 0, TAU); x.fill(); }
+    else if (type === 'lancer') { s = 0.85; x.beginPath(); x.moveTo(0, 17 * s); x.lineTo(-8 * s, -7 * s); x.lineTo(0, -13 * s); x.lineTo(8 * s, -7 * s); x.closePath(); x.fill(); x.fillStyle = '#7a3a10'; x.beginPath(); x.arc(0, -2 * s, 3.5 * s, 0, TAU); x.fill(); }
+    else if (type === 'pulsar') { s = 0.8; x.strokeStyle = col; x.lineWidth = 2.2 * s; x.beginPath(); x.arc(0, 0, 15 * s, 0, TAU); x.stroke(); x.beginPath(); x.arc(0, 0, 7 * s, 0, TAU); x.fill(); for (k = 0; k < 7; k++) { a = (k / 7) * TAU; x.beginPath(); x.arc(Math.cos(a) * 15 * s, Math.sin(a) * 15 * s, 2.4 * s, 0, TAU); x.fill(); } }
     else if (type === 'boss' || type === 'mini') { s = type === 'mini' ? 0.17 : 0.24; x.beginPath(); x.moveTo(0, 46 * s); x.lineTo(-30 * s, 26 * s); x.lineTo(-52 * s, -4 * s); x.lineTo(-30 * s, -34 * s); x.lineTo(30 * s, -34 * s); x.lineTo(52 * s, -4 * s); x.lineTo(30 * s, 26 * s); x.closePath(); x.fill(); x.fillStyle = '#5a0f0f'; x.beginPath(); x.arc(0, 0, 22 * s, 0, TAU); x.fill(); x.fillStyle = '#ff8c4d'; x.beginPath(); x.arc(0, 0, 10 * s, 0, TAU); x.fill(); }
     x.restore();
   }
   function drawDropIcon(x, col, label) {
     x.save(); x.shadowColor = col; x.shadowBlur = 9;
-    x.save(); x.rotate(Math.PI / 4); x.fillStyle = 'rgba(10,10,30,0.85)'; x.fillRect(-8, -8, 16, 16); x.strokeStyle = col; x.lineWidth = 2.2; x.strokeRect(-8, -8, 16, 16); x.restore();
-    x.fillStyle = col; x.font = 'bold 11px monospace'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(label, 0, 0.5); x.restore();
+    if (label.length > 1) {
+      // weapon chip: diamond + the same 3-letter tag as in-game
+      x.save(); x.rotate(Math.PI / 4); x.fillStyle = 'rgba(10,10,30,0.85)'; x.fillRect(-8, -8, 16, 16); x.strokeStyle = col; x.lineWidth = 2.2; x.strokeRect(-8, -8, 16, 16); x.restore();
+    } else {
+      // utility pickup: circle + glyph, like in-game
+      x.beginPath(); x.arc(0, 0, 9.5, 0, TAU); x.fillStyle = 'rgba(10,10,30,0.85)'; x.fill(); x.strokeStyle = col; x.lineWidth = 2.2; x.stroke();
+    }
+    // glyphs drawn as geometry, matching the in-game capsules exactly
+    x.fillStyle = col;
+    if (label === '‖') { x.fillRect(-3.6, -5, 2.6, 10); x.fillRect(1, -5, 2.6, 10); }
+    else if (label === '+') { x.fillRect(-1.6, -5.5, 3.2, 11); x.fillRect(-5.5, -1.6, 11, 3.2); }
+    else if (label === '◈') { x.save(); x.rotate(Math.PI / 4); x.strokeStyle = col; x.lineWidth = 1.9; x.strokeRect(-3.8, -3.8, 7.6, 7.6); x.fillRect(-1.6, -1.6, 3.2, 3.2); x.restore(); }
+    else if (label === '✸') { x.strokeStyle = col; x.lineWidth = 2; x.lineCap = 'round'; for (var kk = 0; kk < 8; kk++) { var aa = (kk / 8) * TAU; x.beginPath(); x.moveTo(Math.cos(aa) * 1.7, Math.sin(aa) * 1.7); x.lineTo(Math.cos(aa) * 5.5, Math.sin(aa) * 5.5); x.stroke(); } x.beginPath(); x.arc(0, 0, 1.9, 0, TAU); x.fill(); }
+    else { x.font = 'bold ' + (label.length > 1 ? 6 : 11) + 'px monospace'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(label, 0, 0.5); }
+    x.restore();
   }
   function drawLockedIcon(x) {
     x.save(); x.strokeStyle = 'rgba(120,150,190,.45)'; x.lineWidth = 1.6;
