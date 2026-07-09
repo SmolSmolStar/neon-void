@@ -470,14 +470,23 @@
       .catch(function () { setStatus(configured ? 'offline — showing cached' : 'leaderboard not configured', 'err'); render(readCache()); });
   }
 
+  // Double-submit guard: auto-save on game over + a SAVE click (or two clicks
+  // once the button re-enables) used to insert the same run twice.
+  var submitInFlight = false, lastSavedRun = '';
+
   function doSubmit(name, score, wave, opts) {
     opts = opts || {}; name = (name || '').trim().slice(0, 20);
     var gg = window.__game;
     if (gg && (gg.usedCheats || score > 800000 * Math.max(1, gg.stage || 1))) { setStatus('test run (cheats used) — score not saved', 'err'); return Promise.resolve(false); }
     if (!name) { setStatus('enter a handle to save your score', 'err'); lbEl.input.focus(); return Promise.resolve(false); }
     if (!(score > 0)) { setStatus('play a round first!', ''); return Promise.resolve(false); }
+    var runKey = name + '|' + score + '|' + (wave == null ? '' : wave);
+    if (runKey === lastSavedRun) { setStatus('already saved · ' + score.toLocaleString() + ' pts', 'ok'); return Promise.resolve(false); }
+    if (submitInFlight) return Promise.resolve(false);
+    submitInFlight = true;
     setName(name); lbEl.save.disabled = true; setStatus(opts.auto ? 'saving your run…' : 'saving…', '');
     return submitScore(name, score, wave).then(function () {
+      lastSavedRun = runKey;
       highlightKey = name + '|' + score; setStatus('saved · ' + score.toLocaleString() + ' pts', 'ok');
       // Show this week's score board with the player's placement.
       boardMode = 'week';
@@ -492,7 +501,7 @@
       }
     })
       .catch(function (err) { setStatus('save failed — ' + (err && err.message ? err.message.slice(0, 40) : 'try again'), 'err'); })
-      .then(function () { lbEl.save.disabled = false; });
+      .then(function () { submitInFlight = false; lbEl.save.disabled = false; });
   }
 
   function onManualSubmit() {
