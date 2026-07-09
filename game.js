@@ -1975,10 +1975,10 @@
         case 'fanfare': [784, 1047, 1319, 1568].forEach((f, i) => this.tone(f, 0.13, 'square', 0.06, 1, i * 0.07)); this.tone(1568, 0.5, 'triangle', 0.06, 1, 0.28); this.tone(2093, 0.5, 'triangle', 0.045, 1, 0.28); break;
         case 'launch':
           // one impressive burst: thump + long roar + sub + rising scream, all at t=0
-          this.tone(150, 0.3, 'sine', 0.28, 0.2);
-          this.noise(1.4, 0.3);
-          this.tone(36, 1.4, 'sine', 0.26, 2.4);
-          this.tone(70, 1.1, 'sawtooth', 0.1, 5);
+          this.tone(150, 0.3, 'sine', 0.252, 0.2);
+          this.noise(1.4, 0.27);
+          this.tone(36, 1.4, 'sine', 0.234, 2.4);
+          this.tone(70, 1.1, 'sawtooth', 0.09, 5);
           break;
       }
     }
