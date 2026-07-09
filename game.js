@@ -127,9 +127,11 @@
     }
 
     // Smooth, mostly stage-driven ramp. Gentle in stage 1 so players survive to
-    // the first boss; scales up steadily across the 10 stages (then endless).
+    // the first boss; steeper past stage 4 so a levelled-up ship (caps unlock
+    // LV5-6 around then) never turns mid-game waves into a cruise.
     difficulty() {
-      return 1 + (this.stage - 1) * 0.42 + (this.wave - 1) * 0.05 + this.time * 0.0022;
+      return 1 + (this.stage - 1) * 0.42 + Math.max(0, this.stage - 4) * 0.12
+        + (this.wave - 1) * 0.05 + this.time * 0.0022;
     }
 
     _mix(v) { return ((v | 0) ^ 0x5A17C3E) + 13; }
@@ -256,17 +258,22 @@
       const p = this.player;
       if (!p.alive) return;
       if (input.dragActive) {
-        // touch / mouse drag: the ship follows the finger 1:1 (relative drag)
+        // touch / mouse drag: HORIZONTAL is absolute — the ship flies to the
+        // finger's x across the full screen width (direct, no lag), rate-
+        // capped so a far tap can't teleport through bullet walls. VERTICAL
+        // stays relative 1:1 (absolute y would put the thumb over the ship).
         const nx = clamp(input.tx, p.r + 4, W - p.r - 4);
         const ny = clamp(input.ty, H * 0.35, H - p.r - 6);
         input.tx = nx; input.ty = ny;
         p.tilt = lerp(p.tilt, clamp((nx - p.x) * 0.05, -0.4, 0.4), 1 - Math.pow(0.001, dt));
-        p.x = nx; p.y = ny;
+        const maxStep = 1100 * dt;
+        p.x += clamp(nx - p.x, -maxStep, maxStep);
+        p.y = ny;
       } else {
         const sp = 320;
-        // keys give ±1; the corner joystick feeds analog jx/jy in [-1, 1]
-        let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0) + (input.jx || 0);
-        let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0) + (input.jy || 0);
+        
+        let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+        let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
         const mag = Math.hypot(dx, dy);
         if (mag > 1) { dx /= mag; dy /= mag; }
         p.x = clamp(p.x + dx * sp * dt, p.r + 4, W - p.r - 4);
@@ -459,9 +466,11 @@
       const cap = 6 + this.stage * 3;   // higher ceiling so later stages pressure
       if (this.spawnT <= 0 && this.enemies.length < cap) {
         // Formations arrive larger and more often as stages advance; the 5th
-        // wave is a crescendo assault right before the boss.
+        // wave is a crescendo assault right before the boss. Stage 1's first
+        // waves breathe (Raiden-style sparse opening — a LV1 ship needs room).
         const crescendo = this.wave >= WAVES_PER_STAGE ? 0.5 : 0;
-        this.spawnT = Math.max(1.05, 2.8 - this.stage * 0.14 - (this.wave - 1) * 0.1 - crescendo) * rand(0.85, 1.15);
+        const opening = this.stage === 1 ? (this.wave <= 2 ? 0.7 : 0.3) : 0;
+        this.spawnT = Math.max(1.05, 2.8 - this.stage * 0.14 - (this.wave - 1) * 0.1 - crescendo + opening) * rand(0.85, 1.15);
         this.spawnFormation(d);
       }
     }
@@ -618,6 +627,13 @@
         enrage: 0, entered: false, dir: 1, tpT: 0, tpX: W / 2,
         vx: 0, vy: 0, baseX: W / 2, spd: 1,
       };
+      // destructible turrets: they fire the aimed volleys — snipe them to
+      // silence those attacks (and earn a FULL BREAK bonus on the kill)
+      const th = Math.round(90 + this.stage * 30);
+      e.turrets = [
+        { dx: -34, dy: 12, hp: th, maxHp: th, alive: true, hitT: 0 },
+        { dx: 34, dy: 12, hp: th, maxHp: th, alive: true, hitT: 0 },
+      ];
       this.enemies.push(e);
     }
 
@@ -706,7 +722,7 @@
 
     enemyFire(e, d) {
       const p = this.player;
-      const bs = 170 + d * 26; // bullet speed
+      const bs = (this.stage === 1 ? 140 : 170) + d * 26; // bullet speed (slower stage-1 opening)
       // HEAVY shots (bigger, dark-cored) cannot be intercepted by the
       // blaster's point-defense — they're what makes bottom-center camping
       // lethal at every stage. Darter fire stays light/interceptable.
@@ -726,7 +742,7 @@
           e.fireT = rand(2.4, 3.8) / Math.sqrt(d);
           for (let k = -1; k <= 1; k++) {
             const a = Math.PI / 2 + k * 0.35;
-            this.ebullets.push({ x: e.x, y: e.y + 8, vx: Math.cos(a) * bs * 0.9, vy: Math.sin(a) * bs * 0.9, r: 5, color: '#7bffd9' });
+            this.ebullets.push({ x: e.x, y: e.y + 8, vx: Math.cos(a) * bs * 0.9, vy: Math.sin(a) * bs * 0.9, r: 5, color: '#ff7b7b' });
           }
           break;
         case 'splitter': e.fireT = 999; break;
@@ -739,7 +755,7 @@
           const n = 7, off = rand(0, TAU);
           for (let k = 0; k < n; k++) {
             const a = off + (k / n) * TAU;
-            this.ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * bs * 0.72, vy: Math.sin(a) * bs * 0.72, r: 5, color: '#7da6ff' });
+            this.ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * bs * 0.72, vy: Math.sin(a) * bs * 0.72, r: 5, color: '#ff7b7b' });
           }
           break;
         }
@@ -766,7 +782,21 @@
         return;
       }
       const hf = e.hp / e.maxHp;
-      e.enrage = hf < 0.25 ? 2 : hf < 0.55 ? 1 : 0;
+      const tier = hf < 0.25 ? 2 : hf < 0.55 ? 1 : 0;
+      if (tier > (e.enrage || 0)) {
+        // enrage thresholds always existed (faster patterns at 55%/25% HP) —
+        // now they're THEATRICAL: flash, shockwave, roar, a visible new phase
+        e.hitT = 0.35;
+        this.shake = Math.max(this.shake, tier === 2 ? 16 : 10);
+        this.flash = Math.max(this.flash, tier === 2 ? 0.5 : 0.3);
+        this.hitstop = Math.max(this.hitstop, 0.05);
+        this.burst(e.x, e.y, 42, cfg.color);
+        this.burst(e.x, e.y, 18, '#ffffff');
+        this.floaters.push({ x: e.x, y: e.y + e.r + 26, text: tier === 2 ? '⚠ ENRAGED ⚠' : 'PHASE 2', t: 1.6, color: tier === 2 ? '#ff3b3b' : '#ffd25a' });
+        this.sfx.play('boss');
+        this.haptic([30, 40, 60]);
+      }
+      e.enrage = tier;
       e.atkT += dt;
       if (e.atkT > cfg.phaseTime) { e.atkT = 0; e.atkIdx = (e.atkIdx + 1) % cfg.phases.length; }
 
@@ -823,7 +853,7 @@
     // Per-boss shooting patterns (data-driven by boss.cfg.phases).
     bossFire(e, d) {
       const p = this.player, cfg = e.cfg;
-      const col = cfg.bullet || '#ff9b4d';
+      const col = '#ff9b3d'; // unified heavy hue: bullets are ALWAYS salmon (light) or orange (heavy)
       const enr = 1 + e.enrage * 0.4;                 // faster when enraged
       const base = 150 + this.stage * 6 + d * 6;      // bullet speed (dodgeable)
       // ALL boss fire is heavy (uninterceptable): point-defense is for trash
@@ -832,10 +862,20 @@
       const shoot = (a, s, r, c) => this.ebullets.push({ x: e.x, y: e.y + 6, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: r || 5, heavy: true, color: c || col });
       const aim = Math.atan2(p.y - e.y, p.x - e.x);
       switch (cfg.phases[e.atkIdx]) {
-        case 'aimed':
+        case 'aimed': {
+          // aimed volleys come FROM the turrets — destroy both and this
+          // phase falls silent (the reward for precision sniping)
           e.fireT = 0.6 / enr;
-          for (let k = -1; k <= 1; k++) shoot(aim + k * 0.16, base * 1.1);
+          const alive = (e.turrets || []).filter((tu) => tu.alive);
+          if (!e.turrets) { for (let k = -1; k <= 1; k++) shoot(aim + k * 0.16, base * 1.1); break; }
+          const bsc = e.r / 52;
+          for (const tu of alive) {
+            const tx = e.x + tu.dx * bsc, ty = e.y + tu.dy * bsc;
+            const ta = Math.atan2(p.y - ty, p.x - tx);
+            for (let k = -1; k <= 1; k += 2) this.ebullets.push({ x: tx, y: ty, vx: Math.cos(ta + k * 0.08) * base * 1.1, vy: Math.sin(ta + k * 0.08) * base * 1.1, r: 5, heavy: true, color: col });
+          }
           break;
+        }
         case 'fan': {
           e.fireT = 1.0 / enr;
           const n = 5 + this.stage + e.enrage;
@@ -865,9 +905,14 @@
           break;
         }
         case 'twin': {
+          // twin streams also originate from the turrets when they live
           e.fireT = 0.13;
           const a = Math.PI / 2 + Math.sin(e.t * 2.4) * 0.85;
-          for (const s of [-1, 1]) this.ebullets.push({ x: e.x + s * (e.r * 0.6), y: e.y + 16, vx: Math.cos(a) * base, vy: Math.sin(a) * base, r: 4.5, heavy: true, color: col });
+          const src = e.turrets ? e.turrets.filter((tu) => tu.alive) : null;
+          if (src && !src.length) break; // both turrets down — silenced
+          const bsc = e.r / 52;
+          const pts = src ? src.map((tu) => [e.x + tu.dx * bsc, e.y + tu.dy * bsc]) : [[e.x - e.r * 0.6, e.y + 16], [e.x + e.r * 0.6, e.y + 16]];
+          for (const [sx, sy] of pts) this.ebullets.push({ x: sx, y: sy, vx: Math.cos(a) * base, vy: Math.sin(a) * base, r: 4.5, heavy: true, color: col });
           break;
         }
         case 'cross': {
@@ -937,6 +982,12 @@
         const clearBonus = 1500 * this.stage;
         this.addScore(clearBonus);
         this.floaters.push({ x: W / 2, y: H * 0.5, text: 'STAGE CLEAR +' + clearBonus, t: 1.8, color: '#ffd25a' });
+        // FULL BREAK: killed the shell after stripping both turrets first
+        if (e.turrets && e.turrets.every((tu) => !tu.alive)) {
+          const fb = 1000 * this.stage;
+          this.addScore(fb);
+          this.floaters.push({ x: W / 2, y: H * 0.5 + 26, text: '★ FULL BREAK +' + fb + ' ★', t: 2.0, color: '#7dff4d' });
+        }
         const capBefore = this.weaponLevelCap();
         this.stage++;
         const capAfter = this.weaponLevelCap();
@@ -1248,6 +1299,38 @@
           const e = this.enemies[j];
           if (e.y < -e.r) continue;
           if (b.hitList && b.hitList.indexOf(e) !== -1) continue; // pierced through already — no re-hit "drilling"
+          // destructible boss turrets soak hits before the hull — snipe them
+          // to silence the aimed volleys (precision play pays)
+          if (e.type === 'boss' && e.turrets) {
+            const bsc = e.r / 52;
+            let ate = false;
+            for (const tu of e.turrets) {
+              if (!tu.alive) continue;
+              const tx = e.x + tu.dx * bsc, ty = e.y + tu.dy * bsc;
+              const trr = (10 * bsc + b.r) * (10 * bsc + b.r);
+              if (dist2(b.x, b.y, tx, ty) < trr) {
+                tu.hp -= b.dmg; tu.hitT = 0.1;
+                if (this.particles.length < 520)
+                  this.particles.push(part(b.x, b.y, rand(-60, 60), rand(-80, 0), 0.15, 2.5, '#ffd6a0', 'spark'));
+                if (tu.hp <= 0) {
+                  tu.alive = false;
+                  const pts = Math.floor((500 + this.stage * 120) * this.combo);
+                  this.addScore(pts);
+                  this.floaters.push({ x: tx, y: ty - 18, text: 'TURRET DOWN +' + pts, t: 1.3, color: '#ffd25a' });
+                  this.burst(tx, ty, 26, '#ff8c4d');
+                  this.burst(tx, ty, 10, '#ffffff');
+                  this.shake = Math.max(this.shake, 10);
+                  this.sfx.play('bigBoom');
+                }
+                this.sfx.play('hit');
+                if (b.pierce > 0) { b.pierce--; (b.hitList = b.hitList || []).push(e); }
+                else { this.bullets.splice(i, 1); }
+                ate = true;
+                break;
+              }
+            }
+            if (ate) break;
+          }
           const rr = (b.r + e.r) * (b.r + e.r);
           if (dist2(b.x, b.y, e.x, e.y) < rr) {
             // splash damage
@@ -1662,6 +1745,16 @@
             break;
           }
           case 'boss': {
+            // enrage aura: a pulsing ring that tells the player the fight changed
+            if (e.enrage) {
+              ctx.save();
+              const pr = e.r + 12 + Math.sin(e.t * (6 + e.enrage * 3)) * 5;
+              this.glow(ctx, e.enrage === 2 ? '#ff3b3b' : '#ffd25a', 18);
+              ctx.strokeStyle = e.enrage === 2 ? 'rgba(255,59,59,0.7)' : 'rgba(255,210,90,0.5)';
+              ctx.lineWidth = 2.5 + e.enrage;
+              ctx.beginPath(); ctx.arc(0, 0, pr, 0, TAU); ctx.stroke();
+              ctx.restore();
+            }
             ctx.rotate(Math.sin(e.t * 0.7) * 0.06);
             // scale the artwork to the boss's radius (the final boss is much larger)
             const bsc = e.r / 52;
@@ -1695,10 +1788,28 @@
             ctx.beginPath(); ctx.arc(0, 0, 22, 0, TAU); ctx.fill();
             ctx.fillStyle = flash ? '#fff' : (isFinal ? '#ffd25a' : '#ff8c4d');
             ctx.beginPath(); ctx.arc(0, 0, (isFinal ? 12 : 10) + Math.sin(e.t * 5) * 2, 0, TAU); ctx.fill();
-            // turrets
-            ctx.fillStyle = flash ? '#fff' : '#8c1f1f';
-            ctx.beginPath(); ctx.arc(-34, 12, 8, 0, TAU); ctx.fill();
-            ctx.beginPath(); ctx.arc(34, 12, 8, 0, TAU); ctx.fill();
+            // destructible turrets: live = armed red w/ barrel glint (flash
+            // white when hit); dead = charred stub
+            if (e.turrets) {
+              for (const tu of e.turrets) {
+                tu.hitT = Math.max(0, tu.hitT - 1 / 60);
+                if (tu.alive) {
+                  ctx.fillStyle = tu.hitT > 0 ? '#ffffff' : (flash ? '#fff' : '#8c1f1f');
+                  ctx.beginPath(); ctx.arc(tu.dx, tu.dy, 9, 0, TAU); ctx.fill();
+                  ctx.fillStyle = tu.hitT > 0 ? '#fff' : '#ff5a5a';
+                  ctx.beginPath(); ctx.arc(tu.dx, tu.dy, 3.5, 0, TAU); ctx.fill();
+                } else {
+                  ctx.fillStyle = '#2a0a0a';
+                  ctx.beginPath(); ctx.arc(tu.dx, tu.dy, 7, 0, TAU); ctx.fill();
+                  ctx.strokeStyle = 'rgba(255,120,90,0.35)'; ctx.lineWidth = 1.5;
+                  ctx.beginPath(); ctx.arc(tu.dx, tu.dy, 7, 0, TAU); ctx.stroke();
+                }
+              }
+            } else {
+              ctx.fillStyle = flash ? '#fff' : '#8c1f1f';
+              ctx.beginPath(); ctx.arc(-34, 12, 8, 0, TAU); ctx.fill();
+              ctx.beginPath(); ctx.arc(34, 12, 8, 0, TAU); ctx.fill();
+            }
             break;
           }
         }
@@ -2429,9 +2540,10 @@
     setMusicVolume(v) { if (this._mgain && this.ctx) this._mgain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.25); }
     _scheduleBar() {
       if (!this.musicOn || !this.ctx) return;
-      const boss = this.musicMode === 'boss';   // final-boss variant: same voices, more menace
+      const omega = this.musicMode === 'omega';  // final boss: the nastiest tier
+      const boss = this.musicMode === 'boss' || omega; // every boss gets menace
       const game = this.musicMode === 'game' || boss;
-      const bpm = boss ? 172 : game ? 148 : 118;
+      const bpm = omega ? 184 : boss ? 172 : game ? 148 : 118;
       const step = 60 / bpm / 4; // 16th notes
       // Song structure: gameplay cycles 8-bar sections A → B → A → C (~52s)
       // instead of looping one 4-chord vamp — B lifts and adds a lead line,
@@ -2465,7 +2577,9 @@
           if (!calm || s % 8 === 0) this._mkick(when);   // halftime kick in the breather
         }
         if (boss && s % 4 === 2) this._mkick(when); // double-time kick — heartbeat under pressure
+        if (omega && s % 2 === 1 && s % 4 !== 3) this._mkick(when); // OMEGA: relentless gallop
         if (game && !calm && (s === 4 || s === 12)) this._msnare(when, boss ? 0.11 : 0.09); // backbeat
+        if (omega && (s === 6 || s === 14)) this._msnare(when, 0.1); // OMEGA: doubled backbeat
         if (!calm && (boss ? true : s % 2 === 0)) this._mnote(arp[(boss ? s : s / 2) % arp.length], when, step * (boss ? 0.9 : 1.5), 'square', boss ? 0.055 : game ? 0.06 : 0.05);
         this._mhat(when, s % 2 ? (boss ? 0.07 : calm ? 0.035 : 0.05) : 0.03);
         if (game && !boss && lead && s % 2 === 1) this._mnote(st(root * 2, phrase[(s - 1) / 2]), when, step * 1.8, 'triangle', 0.055);
@@ -2474,6 +2588,10 @@
       }
       if (calm) { this._mnote(root * 2, t0, step * 16, 'triangle', 0.05); this._mnote(fifth * 2, t0, step * 16, 'sine', 0.04); } // airy pad while the beat rests
       if (boss) this._mnote(root * 4, t0, step * 10, 'sawtooth', 0.045, root * 2.9); // descending siren wail each bar
+      if (omega) { // twin sirens + a growling sub an octave down — pure dread
+        this._mnote(root * 6, t0 + step * 4, step * 9, 'sawtooth', 0.035, root * 4.2);
+        this._mnote(root * 0.5, t0, step * 16, 'sawtooth', 0.09, root * 0.49);
+      }
       if (!game) { const mel = [fifth * 4, root * 4, third * 4, fifth * 4]; this._mnote(mel[this._bar % mel.length], t0 + step * 8, step * 6, 'triangle', 0.06); }
       this._bar++; this._barTime += step * 16;
       const aheadMs = (this._barTime - this.ctx.currentTime) * 1000 - 80;
@@ -2502,7 +2620,7 @@
       onWin() { try { localStorage.setItem('neonvoid_cleared', '1'); } catch (e) {} },
     });
 
-    const input = { left: false, right: false, up: false, down: false, fire: false, bomb: false, dragActive: false, tx: W / 2, ty: H - 90, jx: 0, jy: 0 };
+    const input = { left: false, right: false, up: false, down: false, fire: false, bomb: false, dragActive: false, tx: W / 2, ty: H - 90 };
     let paused = false, musicState = null, audioUnlocked = false, musicVol = 0.5, orientationBlocked = false;
     const isTouch = (typeof matchMedia !== 'undefined' && matchMedia('(hover: none) and (pointer: coarse)').matches) || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     game.audioReady = false;
@@ -2573,7 +2691,10 @@
     canvas.addEventListener('pointermove', (e) => {
       if (!input.dragActive || e.pointerId !== dragId) return;
       const pos = canvasPos(e);
-      input.tx += pos.x - prevX; input.ty += pos.y - prevY;
+      // x: absolute finger position across the full width (direct steering);
+      // y: relative drag as before
+      input.tx = pos.x;
+      input.ty += pos.y - prevY;
       prevX = pos.x; prevY = pos.y;
       e.preventDefault();
     });
@@ -2590,41 +2711,8 @@
       bombBtn.addEventListener('pointercancel', bombUp);
     }
 
-    // Corner joystick (touch): thumb stays in the corner so it never covers
-    // the ship. Analog velocity control with a soft curve for fine dodging;
-    // holding it also auto-fires, like drag. Direct canvas drag still works.
-    const stick = document.getElementById('nv-stick');
-    const stickKnob = stick && stick.querySelector('.knob');
-    if (stick && stickKnob) {
-      const RANGE = 42; // px of knob travel = full speed
-      let stickId = null, scx = 0, scy = 0;
-      const applyStick = (e) => {
-        let dx = e.clientX - scx, dy = e.clientY - scy;
-        const m = Math.hypot(dx, dy);
-        const c = Math.min(m, RANGE);
-        const ux = m ? dx / m : 0, uy = m ? dy / m : 0;
-        stickKnob.style.transform = 'translate(' + (ux * c) + 'px,' + (uy * c) + 'px)';
-        const k = Math.pow(c / RANGE, 1.5); // response curve: precision near center
-        input.jx = ux * k; input.jy = uy * k;
-      };
-      stick.addEventListener('pointerdown', (e) => {
-        e.stopPropagation(); e.preventDefault(); unlock();
-        if (game.state === 'over') return;
-        const r = stick.getBoundingClientRect();
-        scx = r.left + r.width / 2; scy = r.top + r.height / 2;
-        stickId = e.pointerId; input.fire = true;
-        if (stick.setPointerCapture) { try { stick.setPointerCapture(e.pointerId); } catch (err) {} }
-        applyStick(e);
-      });
-      stick.addEventListener('pointermove', (e) => { if (e.pointerId === stickId) { applyStick(e); e.preventDefault(); } });
-      const stickUp = (e) => {
-        if (e.pointerId !== stickId) return;
-        stickId = null; input.jx = 0; input.jy = 0; input.fire = false;
-        stickKnob.style.transform = '';
-      };
-      stick.addEventListener('pointerup', stickUp);
-      stick.addEventListener('pointercancel', stickUp);
-    }
+    // (no joystick: mobile movement is full-width direct steering on the
+    // canvas itself — absolute x tracking + relative y drag)
 
     // scale canvas to fit window while keeping aspect
     function fit() {
@@ -2642,7 +2730,7 @@
     function checkOrientation() {
       orientationBlocked = !!(rotateMQ && rotateMQ.matches);
       game.orientationBlocked = orientationBlocked;
-      if (orientationBlocked) { for (const k in input) if (input[k] === true) input[k] = false; input.dragActive = false; input.jx = 0; input.jy = 0; }
+      if (orientationBlocked) { for (const k in input) if (input[k] === true) input[k] = false; input.dragActive = false; }
     }
     if (rotateMQ) { rotateMQ.addEventListener ? rotateMQ.addEventListener('change', checkOrientation) : rotateMQ.addListener(checkOrientation); }
     window.addEventListener('resize', checkOrientation);
@@ -2660,7 +2748,7 @@
         // the final boss gets an urgent variant of the game track
         const omegaUp = game.state === 'play' && game.bossActive &&
           game.enemies.some((e) => e.type === 'boss' && e.cfg && e.cfg.final);
-        const ms = game.state === 'play' ? (omegaUp ? 'boss' : 'game') : 'menu';
+        const ms = game.state === 'play' ? (omegaUp ? 'omega' : game.bossActive ? 'boss' : 'game') : 'menu'; // every boss gets menace; OMEGA gets its own tier
         if (ms !== musicState) { musicState = ms; sfx.musicMode = ms; sfx.startMusic(ms); }
         const vol = game.state === 'over' ? 0.176 : 0.5; // results screen ducked (10% louder than before)
         if (vol !== musicVol) { musicVol = vol; sfx.setMusicVolume(vol); }
