@@ -109,6 +109,8 @@
     { id: 'e:splitter', t: 'splitter', c: '#ff8cd2', nm: 'SPLITTER', nt: 'bursts into shards' },
     { id: 'e:shard', t: 'shard', c: '#ff8cd2', nm: 'SHARD', nt: 'splinter from a splitter' },
     { id: 'e:tank', t: 'tank', c: '#b98cff', nm: 'TANK', nt: 'armored, high HP' },
+    { id: 'e:lancer', t: 'lancer', c: '#ff9e4d', nm: 'LANCER', nt: 'quivers, locks on, then dashes — sidestep the tell' },
+    { id: 'e:pulsar', t: 'pulsar', c: '#5a8cff', nm: 'PULSAR', nt: 'slow drifter, radial bullet burst' },
     { id: 'e:mini', t: 'mini', c: '#ff6b6b', nm: 'MINI-DREADNOUGHT', nt: 'escort of the final boss' },
     { id: 'e:boss', t: 'boss', c: '#ff3b3b', nm: 'BOSS', nt: 'wave boss — massive HP' },
   ];
@@ -217,7 +219,9 @@
       '#nv-lb .c-dt{width:44px;flex:0 0 44px;text-align:right;color:#8fb2cf;font-size:10px;}',
       '#nv-lb .row.top .c-rk{color:#4df3ff;font-weight:700;}',
       '#nv-lb .row.open{opacity:.3;}#nv-lb .row.open .c-nm,#nv-lb .row.open span{color:#5f7794;}',
-      '#nv-lb .row .crown{color:#ffd25a;text-shadow:0 0 8px rgba(255,210,90,.8);margin-right:3px;}',
+      '#nv-lb .row .crown{color:#ffd25a;text-shadow:0 0 8px rgba(255,210,90,.8);margin-right:4px;}',
+      // #1 pilot stands out: bigger name, golden glow, crown
+      '#nv-lb .row.first .c-nm{font-size:15px;font-weight:700;color:#ffe9a8;text-shadow:0 0 10px rgba(255,210,90,.45);}',
       '#nv-lb .row.me{background:rgba(77,243,255,.10);box-shadow:inset 0 0 0 1px rgba(77,243,255,.3);}',
       '@keyframes nvflash{0%,100%{background:rgba(77,243,255,.10)}50%{background:rgba(255,90,240,.4)}}',
       '#nv-lb .row.flash{animation:nvflash .5s ease 3;}',
@@ -444,7 +448,7 @@
       if (highlightKey && key === highlightKey) li.classList.add('flash');
       li.appendChild(h('span', 'c-rk', '' + (i + 1)));
       var nm = h('span', 'c-nm');
-      if (i === 0) nm.appendChild(h('span', 'crown', '★'));
+      if (i === 0) { li.classList.add('first'); nm.appendChild(h('span', 'crown', '👑')); }
       nm.appendChild(document.createTextNode(r.name || '???'));
       nm.title = r.name || ''; li.appendChild(nm);
       li.appendChild(h('span', 'c-sc', Number(r.score).toLocaleString()));
@@ -472,8 +476,11 @@
   }
 
   // Double-submit guard: auto-save on game over + a SAVE click (or two clicks
-  // once the button re-enables) used to insert the same run twice.
-  var submitInFlight = false, lastSavedRun = '';
+  // once the button re-enables) used to insert the same run twice. The run
+  // identity (score|stage) is also tracked separately from the name, so
+  // editing your handle after the auto-save can't re-submit the same run
+  // under a second name (the peterd/vger incident).
+  var submitInFlight = false, lastSavedRun = '', lastSavedScoreWave = '', lastSavedName = '';
 
   function doSubmit(name, score, wave, opts) {
     opts = opts || {}; name = (name || '').trim().slice(0, 20);
@@ -482,12 +489,14 @@
     if (!name) { setStatus('enter a handle to save your score', 'err'); lbEl.input.focus(); return Promise.resolve(false); }
     if (!(score > 0)) { setStatus('play a round first!', ''); return Promise.resolve(false); }
     var runKey = name + '|' + score + '|' + (wave == null ? '' : wave);
+    var runId = score + '|' + (wave == null ? '' : wave);
     if (runKey === lastSavedRun) { setStatus('already saved · ' + score.toLocaleString() + ' pts', 'ok'); return Promise.resolve(false); }
+    if (runId === lastSavedScoreWave) { setStatus('this run is already saved as "' + lastSavedName + '"', 'err'); return Promise.resolve(false); }
     if (submitInFlight) return Promise.resolve(false);
     submitInFlight = true;
     setName(name); lbEl.save.disabled = true; setStatus(opts.auto ? 'saving your run…' : 'saving…', '');
     return submitScore(name, score, wave).then(function () {
-      lastSavedRun = runKey;
+      lastSavedRun = runKey; lastSavedScoreWave = runId; lastSavedName = name;
       highlightKey = name + '|' + score; setStatus('saved · ' + score.toLocaleString() + ' pts', 'ok');
       // Show this week's score board with the player's placement.
       boardMode = 'week';

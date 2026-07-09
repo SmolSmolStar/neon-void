@@ -33,6 +33,8 @@
     weaver:  { hp: 4,  r: 16, score: 200, color: '#5affc8', drop: 0.18 },
     tank:    { hp: 14, r: 24, score: 400, color: '#b98cff', drop: 0.5 },
     splitter:{ hp: 6,  r: 18, score: 250, color: '#ff8cd2', drop: 0.2 },
+    lancer:  { hp: 3,  r: 13, score: 220, color: '#ff9e4d', drop: 0.16 },
+    pulsar:  { hp: 9,  r: 18, score: 300, color: '#5a8cff', drop: 0.24 },
     shard:   { hp: 1,  r: 9,  score: 50,  color: '#ff8cd2', drop: 0.05 },
     boss:    { hp: 320, r: 52, score: 5000, color: '#ff3b3b', drop: 1 },
   };
@@ -54,6 +56,7 @@
   ];
   const STAGES = BOSSES.length;
   const WAVES_PER_STAGE = 5;
+  const POWER_DROP_TTL = 4.5; // bombs/sweeps blink their last 1.6s, then vanish
 
   // ============================================================
   // Game
@@ -472,10 +475,17 @@
     // Stage-weighted random enemy type (progressive roster).
     pickType() {
       if (this.stage <= 1) return Math.random() < 0.6 ? 'darter' : 'drone';
+      // every early stage introduces a new face: s2 lancer, s3 tank, s4 pulsar
       const roster = ['darter', 'drone', 'weaver'];
-      if (this.stage >= 3) roster.push('splitter');
-      if (this.stage >= 4) roster.push('tank');
-      const weights = roster.map((tp) => tp === 'tank' ? 0.5 + this.stage * 0.07 : tp === 'splitter' ? 0.7 : tp === 'weaver' ? 1.0 : 1.4);
+      if (this.stage >= 2) roster.push('lancer');
+      if (this.stage >= 3) roster.push('splitter', 'tank');
+      if (this.stage >= 4) roster.push('pulsar');
+      const weights = roster.map((tp) =>
+        tp === 'tank' ? 0.5 + this.stage * 0.07
+        : tp === 'splitter' ? 0.7
+        : tp === 'lancer' ? 0.85
+        : tp === 'pulsar' ? 0.4 + this.stage * 0.02
+        : tp === 'weaver' ? 1.0 : 1.4);
       const tot = weights.reduce((a, b) => a + b, 0);
       let acc = Math.random() * tot;
       for (let i = 0; i < roster.length; i++) { acc -= weights[i]; if (acc <= 0) return roster[i]; }
@@ -485,13 +495,22 @@
     // Back-compat single spawn (used by tests).
     spawnEnemy(d) { this.mkEnemy(this.pickType(), rand(40, W - 40), -30, d); }
 
-    // Coordinated formations that grow + quicken with the stage.
+    // Coordinated formations that grow + quicken with the stage. Every enemy
+    // type MUST appear in some formation — pickType() alone doesn't reach
+    // real play (lancers/pulsars/splitters were invisible until these).
     spawnFormation(d) {
       const s = this.stage;
       const kinds = ['line', 'stream'];
-      if (s >= 2) kinds.push('vee', 'swarm');
-      if (s >= 3) kinds.push('flank', 'escort');
-      const kind = kinds[randi(0, kinds.length - 1)];
+      if (s >= 2) kinds.push('vee', 'swarm', 'hunt');       // lancers stalk in
+      if (s >= 3) kinds.push('flank', 'escort', 'splits');  // splitter cluster
+      if (s >= 4) kinds.push('pulse');                      // pulsar + guards
+      // each stage OPENS with the formations that introduce its new enemies,
+      // so every debut is guaranteed (random picks could skip a stage's face)
+      if (this._debutStage !== s) {
+        this._debutStage = s;
+        this._debutQ = s === 2 ? ['hunt'] : s === 3 ? ['escort', 'splits'] : s === 4 ? ['pulse'] : [];
+      }
+      const kind = (this._debutQ && this._debutQ.length) ? this._debutQ.shift() : kinds[randi(0, kinds.length - 1)];
       const basic = () => (s >= 2 && Math.random() < 0.5) ? 'weaver' : (Math.random() < 0.6 ? 'darter' : 'drone');
       switch (kind) {
         case 'line': {              // a row sweeping down together
@@ -524,6 +543,25 @@
           this.mkEnemy('tank', clamp(this.player.x + rand(-80, 80), 60, W - 60), -44, d);
           const n = 2 + Math.floor(s / 3);
           for (let i = 0; i < n; i++) this.mkEnemy('drone', rand(50, W - 50), -30 - i * 20, d);
+          break;
+        }
+        case 'hunt': {              // lancers stalk in with a light screen
+          const n = 1 + Math.floor(s / 4);
+          for (let i = 0; i < n; i++) this.mkEnemy('lancer', rand(60, W - 60), -30 - i * 60, d);
+          this.mkEnemy('darter', rand(40, W - 40), -40, d);
+          this.mkEnemy('darter', rand(40, W - 40), -70, d);
+          break;
+        }
+        case 'splits': {            // a cluster of splitters — shard rain incoming
+          const n = 2 + Math.floor(s / 4), x0 = rand(90, W - 90);
+          for (let i = 0; i < n; i++) this.mkEnemy('splitter', clamp(x0 + (i - (n - 1) / 2) * 70, 40, W - 40), -30 - (i % 2) * 40, d);
+          break;
+        }
+        case 'pulse': {             // a pulsar drifts in behind a drone screen
+          this.mkEnemy('pulsar', rand(80, W - 80), -34, d);
+          if (s >= 7) this.mkEnemy('pulsar', rand(80, W - 80), -110, d);
+          const n = 2 + Math.floor(s / 4);
+          for (let i = 0; i < n; i++) this.mkEnemy('drone', rand(50, W - 50), -30 - i * 24, d);
           break;
         }
       }
@@ -605,6 +643,31 @@
           case 'tank':
             e.y += (46 + d * 7) * sp * dt;
             break;
+          case 'lancer':
+            // descend → quiver telegraph → dash through the player's position
+            if (!e.phase) e.phase = 1;
+            if (e.phase === 1) {
+              e.y += (120 + d * 14) * sp * dt;
+              e.x = e.baseX + Math.sin(e.t * 1.6) * 34;
+              if (e.y > 140 + (e.baseX % 90)) { e.phase = 2; e.aimT = 0.65; }
+            } else if (e.phase === 2) {
+              e.aimT -= dt;
+              e.x += Math.sin(e.t * 30) * 22 * dt; // the tell: a violent quiver
+              if (e.aimT <= 0 && p.alive) {
+                const a = Math.atan2(p.y - e.y, p.x - e.x);
+                const v = 430 + d * 16;
+                e.vx = Math.cos(a) * v; e.vy = Math.sin(a) * v;
+                e.phase = 3;
+              }
+            } else {
+              e.x += e.vx * dt; e.y += e.vy * dt;
+            }
+            break;
+          case 'pulsar':
+            // slow ringed drifter — its danger is the radial burst, not contact
+            e.y += (34 + d * 4) * sp * dt;
+            e.x = clamp(e.baseX + Math.sin(e.t * 0.9) * 40, 24, W - 24);
+            break;
           case 'boss': this.updateBoss(e, dt, d); break;
           case 'mini':
             if (e.y < 195) e.y += 85 * dt;
@@ -654,6 +717,18 @@
           break;
         case 'splitter': e.fireT = 999; break;
         case 'shard': e.fireT = 999; break;
+        case 'lancer': e.fireT = 999; break; // its whole threat is the dash
+        case 'pulsar': {
+          // radial burst — boss-pattern language in a wave mob; LIGHT bullets,
+          // so point-defense and the sweep both counter it
+          e.fireT = rand(2.6, 3.6) / Math.sqrt(d);
+          const n = 7, off = rand(0, TAU);
+          for (let k = 0; k < n; k++) {
+            const a = off + (k / n) * TAU;
+            this.ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * bs * 0.72, vy: Math.sin(a) * bs * 0.72, r: 5, color: '#7da6ff' });
+          }
+          break;
+        }
         case 'tank':
           e.fireT = rand(1.6, 2.6) / Math.sqrt(d);
           aimAt(0.06, bs * 1.1, true); aimAt(0.3, bs * 0.9, true);
@@ -681,33 +756,39 @@
       e.atkT += dt;
       if (e.atkT > cfg.phaseTime) { e.atkT = 0; e.atkIdx = (e.atkIdx + 1) % cfg.phases.length; }
 
-      const cx = W / 2, tt = e.t, amp = W / 2 - e.r - 6;
+      // movement clock starts at ZERO when the pattern takes over (e.t has
+      // been running since spawn with a random offset — using it made
+      // absolute-position movesets TELEPORT on the first pattern frame),
+      // and constant y-offsets ease in over ~1s so the handoff is seamless
+      e.mt = (e.mt || 0) + dt;
+      const cx = W / 2, tt = e.mt, amp = W / 2 - e.r - 6;
+      const k = Math.min(1, e.mt / 1);
       switch (cfg.move) {
-        case 'hover': e.x = cx + Math.sin(tt * 1.0) * 44; e.y = 100 + Math.sin(tt * 0.8) * 10; break;
+        case 'hover': e.x = cx + Math.sin(tt * 1.0) * 44; e.y = entryY + (Math.sin(tt * 0.8) * 10 - 5) * k; break;
         case 'pace': {
           const s = cfg.moveSpd || 80;
           e.x += e.dir * s * dt;
           if (e.x < e.r + 8) { e.x = e.r + 8; e.dir = 1; }
           if (e.x > W - e.r - 8) { e.x = W - e.r - 8; e.dir = -1; }
-          e.y = 100; break;
+          e.y = entryY - 5 * k; break;
         }
-        case 'sweep': e.x = cx + Math.sin(tt * 0.7) * amp; e.y = 104 + Math.sin(tt * 1.3) * 8; break;
-        case 'figure8': e.x = cx + Math.sin(tt * (0.9 + e.enrage * 0.12)) * amp; e.y = 120 + Math.sin(tt * 1.8) * 46; break;
+        case 'sweep': e.x = cx + Math.sin(tt * 0.7) * amp; e.y = entryY + (Math.sin(tt * 1.3) * 8 - 1) * k; break;
+        case 'figure8': e.x = cx + Math.sin(tt * (0.9 + e.enrage * 0.12)) * amp; e.y = entryY + (15 + Math.sin(tt * 1.8) * 46) * k; break;
         case 'chase': {
           const s = cfg.moveSpd || 70;
           e.x += clamp(this.player.x - e.x, -s * dt, s * dt);
-          e.y = 100 + Math.sin(tt * 1.1) * 8; break;
+          e.y = entryY + (Math.sin(tt * 1.1) * 8 - 5) * k; break;
         }
-        case 'dive': e.x = cx + Math.sin(tt * 0.6) * amp; e.y = 105 + Math.max(0, Math.sin(tt * 0.7)) * 175; break;
+        case 'dive': e.x = cx + Math.sin(tt * 0.6) * amp; e.y = entryY + Math.max(0, Math.sin(tt * 0.7)) * 175; break;
         case 'teleport': {
           e.tpT += dt;
           if (e.tpT > (2.2 - e.enrage * 0.4)) { e.tpT = 0; e.tpX = rand(e.r + 20, W - e.r - 20); this.burst(e.x, e.y, 12, cfg.color); }
           e.x += (e.tpX - e.x) * Math.min(1, dt * 9);
-          e.y = 100 + Math.sin(tt * 1.4) * 10; break;
+          e.y = entryY + (Math.sin(tt * 1.4) * 10 - 5) * k; break;
         }
-        default: e.x = cx + Math.sin(tt * 0.7) * amp; e.y = 104;
+        default: e.x = cx + Math.sin(tt * 0.7) * amp; e.y = entryY - 1 * k;
       }
-      if (cfg.final) e.y += 35; // keep the oversized final boss clear of the HP bar
+      // (final boss stays clear of the HP bar via its higher entryY baseline)
       e.x = clamp(e.x, e.r + 4, W - e.r - 4);
 
       // OMEGA phase reinforcements: escorts at 66% and 33% HP — intensity
@@ -871,15 +952,26 @@
         } else {
           this.announce((this.stage > STAGES ? '∞ ENDLESS · STAGE ' : 'STAGE ') + this.stage);
         }
-        // shower of drops as a reward
-        for (let i = 0; i < 5; i++) this.spawnDrop(e.x + rand(-60, 60), e.y + rand(-30, 30), true);
+        // shower of drops as a reward — at most ONE laser sweep per shower
+        // (a second fires into the same post-boss lull and is wasted)
+        let showerLaser = false;
+        for (let i = 0; i < 5; i++) {
+          this.spawnDrop(e.x + rand(-60, 60), e.y + rand(-30, 30), true);
+          const nd = this.drops[this.drops.length - 1];
+          if (nd.kind === 'laser') {
+            if (showerLaser) nd.kind = 'shield';
+            showerLaser = true;
+          }
+        }
         // clear enemy bullets as reward
         this.ebullets.length = 0;
       } else if (e.type === 'mini') {
         // escorts drop supportive items only — a lifeline mid-boss-fight,
         // never a weapon chip that baits you into switching off your build
         const roll = Math.random();
-        this.drops.push({ x: e.x, y: e.y, vy: 60, kind: roll < 0.42 ? 'heal' : roll < 0.68 ? 'shield' : roll < 0.92 ? 'laser' : 'bomb', t: 0, r: 12 });
+        // no sweeps here: minis die DURING the OMEGA fight, and a sweep there
+        // would melt the boss (same rule as the boss-window drop exclusion)
+        this.drops.push({ x: e.x, y: e.y, vy: 60, kind: roll < 0.45 ? 'heal' : roll < 0.8 ? 'shield' : 'bomb', t: 0, r: 12 });
       } else if (Math.random() < e.dropChance || this.killsSinceDrop >= 6) {
         this.spawnDrop(e.x, e.y, false);
         this.killsSinceDrop = 0;
@@ -946,6 +1038,19 @@
         const wanted = !d.kind.startsWith('weapon:') || d.kind.slice(7) === p.weapon;
         const budget = wanted ? 1.8 : 1.1;
         const spd = wanted ? 260 : 210;
+        // POWER pickups (bomb + laser sweep) demand a decision: they fall like
+        // any drop (coming TOWARD you — never a dive into fresh spawns), but
+        // only live ~5.5s: blink ~3 times, then gone. Commit or let it pass.
+        const power = d.kind === 'bomb' || d.kind === 'laser';
+        if (power) {
+          const left = POWER_DROP_TTL - d.t;
+          if (left <= 0) {
+            this.burst(d.x, d.y, 8, d.kind === 'bomb' ? '#ffb84d' : '#ff4df0');
+            this.drops.splice(i, 1);
+            continue;
+          }
+          d.fade = left < 1.6 ? left : null; // renderer blinks on this
+        }
         if (p.alive && d.magT < budget && dNow < 120 * 120) {
           d.magT += (d.pd != null && dNow > d.pd) ? dt * (wanted ? 4 : 6) : dt;
           const a = Math.atan2(p.y - d.y, p.x - d.x);
@@ -1466,6 +1571,25 @@
           ctx.fillStyle = flash ? '#fff' : color;
           ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.fill();
           break;
+        case 'lancer':
+          // elongated dart, tip pointing down (the dash direction at rest)
+          ctx.beginPath();
+          ctx.moveTo(0, 17); ctx.lineTo(-8, -7); ctx.lineTo(0, -13); ctx.lineTo(8, -7);
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle = flash ? '#fff' : '#7a3a10';
+          ctx.beginPath(); ctx.arc(0, -2, 3.5, 0, TAU); ctx.fill();
+          break;
+        case 'pulsar':
+          // ringed emitter: orb core + bead ring hinting at the radial burst
+          ctx.strokeStyle = flash ? '#fff' : color;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.stroke();
+          ctx.beginPath(); ctx.arc(0, 0, 7, 0, TAU); ctx.fill();
+          for (let k = 0; k < 7; k++) {
+            const a = (k / 7) * TAU;
+            ctx.beginPath(); ctx.arc(Math.cos(a) * 15, Math.sin(a) * 15, 2.6, 0, TAU); ctx.fill();
+          }
+          break;
       }
     },
     _enemyRot(e) {
@@ -1475,12 +1599,16 @@
         case 'weaver': return Math.sin(e.t * 3) * 0.4;
         case 'splitter': return e.t * 1.4;
         case 'shard': return e.t * 6;
+        case 'lancer':
+          if (e.phase === 3) return Math.atan2(e.vy, e.vx) - Math.PI / 2; // tip leads the dash
+          return Math.sin(e.t * (e.phase === 2 ? 26 : 2)) * (e.phase === 2 ? 0.2 : 0.08); // quiver = tell
+        case 'pulsar': return e.t * 0.8;
         default: return 0;
       }
     },
 
     drawEnemies(ctx, g) {
-      const SMALL = { darter: 64, drone: 64, weaver: 64, splitter: 64, shard: 48, tank: 80 };
+      const SMALL = { darter: 64, drone: 64, weaver: 64, splitter: 64, shard: 48, tank: 80, lancer: 66, pulsar: 68 };
       for (const e of g.enemies) {
         ctx.save();
         ctx.translate(e.x, e.y);
@@ -1645,6 +1773,8 @@
     drawDrops(ctx, g) {
       for (const d of g.drops) {
         ctx.save();
+        // expiring power pickup: ~3 sharp blinks before it vanishes
+        if (d.fade != null) ctx.globalAlpha = Math.floor(d.fade * 4) % 2 ? 0.18 : 1;
         ctx.translate(d.x, d.y + Math.sin(d.t * 4) * 3);
         if (d.kind.startsWith('weapon:')) {
           // weapons: diamond + full 3-letter tag — single letters were
