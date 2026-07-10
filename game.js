@@ -825,9 +825,20 @@
         }
         case 'dive': e.x = cx + Math.sin(tt * 0.6) * amp; e.y = entryY + Math.max(0, Math.sin(tt * 0.7)) * 175; break;
         case 'teleport': {
+          // a TRUE blink: brief charge-up shimmer, vanish-burst, reappear-
+          // burst across the arena (it used to be a fast glide — players
+          // rightly called out that it never actually teleported)
           e.tpT += dt;
-          if (e.tpT > (2.2 - e.enrage * 0.4)) { e.tpT = 0; e.tpX = rand(e.r + 20, W - e.r - 20); this.burst(e.x, e.y, 12, cfg.color); }
-          e.x += (e.tpX - e.x) * Math.min(1, dt * 9);
+          const period = 2.2 - e.enrage * 0.4;
+          if (e.tpT > period - 0.35 && !e.tpCharge) { e.tpCharge = true; e.hitT = Math.max(e.hitT, 0.3); this.burst(e.x, e.y, 8, '#ffffff'); }
+          if (e.tpT > period) {
+            e.tpT = 0; e.tpCharge = false;
+            this.burst(e.x, e.y, 22, cfg.color);
+            this.burst(e.x, e.y, 10, '#ffffff');
+            e.x = rand(e.r + 20, W - e.r - 20);
+            this.burst(e.x, e.y, 22, cfg.color);
+            this.sfx.play('shieldHit');
+          }
           e.y = entryY + (Math.sin(tt * 1.4) * 10 - 5) * k; break;
         }
         default: e.x = cx + Math.sin(tt * 0.7) * amp; e.y = entryY - 1 * k;
@@ -1316,7 +1327,9 @@
                   tu.alive = false;
                   const pts = Math.floor((500 + this.stage * 120) * this.combo);
                   this.addScore(pts);
-                  this.floaters.push({ x: tx, y: ty - 18, text: 'TURRET DOWN +' + pts, t: 1.3, color: '#ffd25a' });
+                  // stagger the two callouts (left turret prints higher) and
+                  // clamp x so wide text never overlaps or clips off-screen
+                  this.floaters.push({ x: clamp(tx, 80, W - 80), y: ty - (tu.dx < 0 ? 40 : 16), text: 'TURRET DOWN +' + pts, t: 1.3, color: '#ffd25a' });
                   this.burst(tx, ty, 26, '#ff8c4d');
                   this.burst(tx, ty, 10, '#ffffff');
                   this.shake = Math.max(this.shake, 10);
