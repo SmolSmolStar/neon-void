@@ -59,7 +59,7 @@
   // Single source of truth for the release number: shown on the title screen
   // as "ALPHA vN", compared against the live site's cache-buster by the
   // update check, and MUST equal the ?v=N in index.html (deploy bumps both).
-  const GAME_VERSION = 58;
+  const GAME_VERSION = 59;
   const POWER_DROP_TTL = 4.5; // bombs/sweeps blink their last 1.6s, then vanish
 
   // ============================================================
@@ -821,7 +821,14 @@
           e.y = entryY - 5 * k; break;
         }
         case 'sweep': e.x = cx + Math.sin(tt * 0.7) * amp; e.y = entryY + (Math.sin(tt * 1.3) * 8 - 1) * k; break;
-        case 'figure8': e.x = cx + Math.sin(tt * (0.9 + e.enrage * 0.12)) * amp; e.y = entryY + (15 + Math.sin(tt * 1.8) * 46) * k; break;
+        case 'figure8':
+          // phase ACCUMULATOR, not freq×time: enrage speeds the weave up
+          // without snapping position (freq×running-clock jumped the phase —
+          // and the boss — across the arena the instant a tier kicked in)
+          e.ph8 = (e.ph8 || 0) + dt * (0.9 + e.enrage * 0.12);
+          e.x = cx + Math.sin(e.ph8) * amp;
+          e.y = entryY + (15 + Math.sin(tt * 1.8) * 46) * k;
+          break;
         case 'chase': {
           const s = cfg.moveSpd || 70;
           e.x += clamp(this.player.x - e.x, -s * dt, s * dt);
@@ -2309,12 +2316,17 @@
         ctx.fillText('★ SECTOR CLEARED — MASTER PILOT ★', W / 2, ty + 136); this.noGlow(ctx);
       }
 
-      // version tag — bottom-left, quiet: lets pilots report which build they're on
-      ctx.font = '10px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillStyle = 'rgba(160,180,205,0.45)';
-      ctx.fillText('ALPHA v' + GAME_VERSION, 10, H - 10);
-      ctx.textAlign = 'center';
+      // version tag — bottom-left, quiet. PRIVATE for now: only the test page
+      // shows it (owner's call: the public site stays unversioned until the
+      // game is ready to wear a BETA badge). The stale-tab update check runs
+      // everywhere regardless.
+      if (typeof window !== 'undefined' && window.NEONVOID_TEST) {
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(160,180,205,0.45)';
+        ctx.fillText('ALPHA v' + GAME_VERSION, 10, H - 10);
+        ctx.textAlign = 'center';
+      }
 
       // controls — bright keycap boxes so nobody misses BOMB or PAUSE
       const keycap = (kx, ky, label) => {
