@@ -464,9 +464,7 @@
       li.appendChild(h('span', 'c-rk', '' + (i + 1)));
       var nm = h('span', 'c-nm');
       if (i === 0) { li.classList.add('first'); nm.appendChild(h('span', 'crown', '👑')); }
-      // 🐉 — mael is the board's resident dragon (inside joke; display-only,
-      // his stored name is untouched so saves/dedup/PB-matching still work)
-      nm.appendChild(document.createTextNode((r.name || '???') + ((r.name || '').toLowerCase() === 'mael' ? ' 🐉' : '')));
+      nm.appendChild(document.createTextNode(r.name || '???'));
       nm.title = r.name || ''; li.appendChild(nm);
       li.appendChild(h('span', 'c-sc', Number(r.score).toLocaleString()));
       li.appendChild(h('span', 'c-wv', (r.wave > 0) ? String(r.wave) : '—'));
