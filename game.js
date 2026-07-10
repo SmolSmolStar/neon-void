@@ -2710,14 +2710,14 @@
       const r = canvas.getBoundingClientRect();
       return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
     };
-    let dragId = null, prevX = 0, prevY = 0;
+    let dragId = null, prevY = 0;
     canvas.addEventListener('pointerdown', (e) => {
       unlock();
       if (game.state === 'over') return;        // results overlay handles retry
       input.fire = true;                        // one tap starts the game (and fires while held)
       if (game.state === 'play') {
         const pos = canvasPos(e);
-        prevX = pos.x; prevY = pos.y;
+        prevY = pos.y;
         input.tx = game.player.x; input.ty = game.player.y;
         input.dragActive = true; dragId = e.pointerId;
         if (canvas.setPointerCapture) { try { canvas.setPointerCapture(e.pointerId); } catch (err) {} }
@@ -2731,7 +2731,7 @@
       // y: relative drag as before
       input.tx = pos.x;
       input.ty += pos.y - prevY;
-      prevX = pos.x; prevY = pos.y;
+      prevY = pos.y;
       e.preventDefault();
     });
     const endPtr = (e) => { input.fire = false; if (e.pointerId === dragId) { input.dragActive = false; dragId = null; } };

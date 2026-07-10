@@ -67,8 +67,28 @@
     var q = CFG.url + '/rest/v1/scores?game=eq.' + encodeURIComponent(CFG.game)
       + '&select=' + sel + order + '&limit=200';
     return fetch(q, { headers: headers() }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function (rows) { return dedupeByName(rows); });
+      .then(function (rows) {
+        // 🐉 the dragon watch: mael's pre-rebalance throne was 9,088,267.
+        // The day any of his rows EXCEEDS it, the Emerald Royal dragon
+        // appears beside his name — self-triggering, no deploy needed.
+        for (var i = 0; i < rows.length; i++) {
+          if ((rows[i].name || '').toLowerCase() === 'mael' && rows[i].score > MAEL_THRONE) { maelAscended = true; break; }
+        }
+        return dedupeByName(rows);
+      });
   }
+  var MAEL_THRONE = 9088267;
+  var maelAscended = false;
+  // Emerald Royal dragon head (picked by the owner) — inline SVG, 32x32 box
+  var DRAGON_SVG = '<svg width="15" height="15" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px">' +
+    '<path d="M12.5,8.5 C9,3.5 3.5,2.2 2.6,4.8 C6.5,5 8.6,7 10.2,10.2 Z" fill="#ffd25a" stroke="#14572e" stroke-width="1" stroke-linejoin="round"/>' +
+    '<path d="M16.5,7.4 C14.5,4 10.5,1.8 9.4,3.4 C12.4,4.4 13.8,6.2 14.8,8.6 Z" fill="#ffd25a" stroke="#14572e" stroke-width="1" stroke-linejoin="round"/>' +
+    '<path d="M7.6,12.6 L2.8,13.4 Q2,15.6 4.6,16.2 L8.2,15.4 Z" fill="#ffd25a" stroke="#14572e" stroke-width="1" stroke-linejoin="round"/>' +
+    '<path d="M7,14.5 C6.6,9.5 11,6.8 15.5,7 C20,7.2 23,8.6 25.5,10.6 L29.3,13.2 Q30.2,13.9 29.2,14.5 L23.5,15.4 L19,16 C17,16.2 15,16.4 13,17.6 C10,19.2 7.2,17.8 7,14.5 Z" fill="#2ecc63" stroke="#14572e" stroke-width="1" stroke-linejoin="round"/>' +
+    '<path d="M13.5,17.8 C16,16.9 19.5,16.6 22.5,16.6 L21.6,18.0 L23.8,17.4 L26.6,16.2 C26,18.6 23,20.2 19,20 C16.4,19.9 14.4,19.1 13.5,17.8 Z" fill="#1a8a44" stroke="#14572e" stroke-width="1" stroke-linejoin="round"/>' +
+    '<path d="M12,9.6 C14,9 17,9.4 18.8,10.4" fill="none" stroke="#14572e" stroke-width="1.1" stroke-linecap="round"/>' +
+    '<ellipse cx="15.6" cy="12" rx="2.4" ry="2" fill="#0c2e18"/><ellipse cx="16.2" cy="12" rx="0.9" ry="1.6" fill="#000"/>' +
+    '<circle cx="15" cy="11.2" r="0.6" fill="#fff" opacity="0.9"/><circle cx="27" cy="13.5" r="0.7" fill="#14572e"/></svg>';
   function submitScore(name, score, wave) {
     if (!configured) return Promise.reject(new Error('not configured'));
     var row = { game: CFG.game, name: name, score: score };
@@ -235,6 +255,7 @@
       '#nv-lb .row.top .c-rk{color:#4df3ff;font-weight:700;}',
       '#nv-lb .row.open{opacity:.3;}#nv-lb .row.open .c-nm,#nv-lb .row.open span{color:#5f7794;}',
       '#nv-lb .row .crown{color:#ffd25a;text-shadow:0 0 8px rgba(255,210,90,.8);margin-right:4px;}',
+      '#nv-lb .row .dragon{margin-left:5px;display:inline-block;filter:drop-shadow(0 0 5px rgba(46,204,99,.7));}',
       // #1 pilot stands out: bigger name, golden glow, crown
       '#nv-lb .row.first .c-nm{font-size:15px;font-weight:700;color:#ffe9a8;text-shadow:0 0 10px rgba(255,210,90,.45);}',
       '#nv-lb .row.me{background:rgba(77,243,255,.10);box-shadow:inset 0 0 0 1px rgba(77,243,255,.3);}',
@@ -465,6 +486,10 @@
       var nm = h('span', 'c-nm');
       if (i === 0) { li.classList.add('first'); nm.appendChild(h('span', 'crown', '👑')); }
       nm.appendChild(document.createTextNode(r.name || '???'));
+      if (maelAscended && (r.name || '').toLowerCase() === 'mael') {
+        var drg = h('span', 'dragon'); drg.innerHTML = DRAGON_SVG; drg.title = 'ascended — beat the old throne on the new meta';
+        nm.appendChild(drg);
+      }
       nm.title = r.name || ''; li.appendChild(nm);
       li.appendChild(h('span', 'c-sc', Number(r.score).toLocaleString()));
       li.appendChild(h('span', 'c-wv', (r.wave > 0) ? String(r.wave) : '—'));
