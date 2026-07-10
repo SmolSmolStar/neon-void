@@ -56,6 +56,10 @@
   ];
   const STAGES = BOSSES.length;
   const WAVES_PER_STAGE = 5;
+  // Single source of truth for the release number: shown on the title screen
+  // as "ALPHA vN", compared against the live site's cache-buster by the
+  // update check, and MUST equal the ?v=N in index.html (deploy bumps both).
+  const GAME_VERSION = 58;
   const POWER_DROP_TTL = 4.5; // bombs/sweeps blink their last 1.6s, then vanish
 
   // ============================================================
@@ -2305,6 +2309,13 @@
         ctx.fillText('★ SECTOR CLEARED — MASTER PILOT ★', W / 2, ty + 136); this.noGlow(ctx);
       }
 
+      // version tag — bottom-left, quiet: lets pilots report which build they're on
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(160,180,205,0.45)';
+      ctx.fillText('ALPHA v' + GAME_VERSION, 10, H - 10);
+      ctx.textAlign = 'center';
+
       // controls — bright keycap boxes so nobody misses BOMB or PAUSE
       const keycap = (kx, ky, label) => {
         const kw = Math.max(24, label.length * 8 + 12), kh = 19, r = 4;
@@ -2785,13 +2796,42 @@
     requestAnimationFrame(frame);
 
     // expose for smoke tests
+    // ---- stale-tab update check ------------------------------------------
+    // A tab left open keeps running old code forever (cache-busters only help
+    // on page load). Ping index.html occasionally, read its ?v=N, and if the
+    // site has moved past this build, offer a one-tap refresh.
+    function showUpdateBanner(liveV) {
+      if (document.getElementById('nv-update')) return;
+      const el = document.createElement('div');
+      el.id = 'nv-update';
+      el.textContent = '⟳ NEW VERSION v' + liveV + ' — TAP TO UPDATE';
+      el.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:99;' +
+        'font-family:monospace;font-size:12px;font-weight:700;letter-spacing:.08em;cursor:pointer;' +
+        'color:#04121c;background:#7dff4d;padding:7px 16px;border-radius:8px;' +
+        'box-shadow:0 0 18px rgba(125,255,77,.6);';
+      el.addEventListener('click', () => location.reload());
+      document.body.appendChild(el);
+    }
+    function checkForUpdate() {
+      fetch('index.html', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.text() : ''))
+        .then((html) => {
+          const m = /game\.js\?v=(\d+)/.exec(html || '');
+          if (m && parseInt(m[1], 10) > GAME_VERSION) showUpdateBanner(m[1]);
+        })
+        .catch(() => {}); // offline / file:// — never bother the player
+    }
+    setTimeout(checkForUpdate, 60 * 1000);
+    setInterval(checkForUpdate, 5 * 60 * 1000);
+    window.__showUpdateBanner = showUpdateBanner; // for the smoke suite
+
     window.__game = game;
     window.__input = input;
     window.__sfx = sfx;
   }
 
   // exports
-  const api = { Game, Render, WEAPONS, ENEMY_TYPES, W, H };
+  const api = { Game, Render, WEAPONS, ENEMY_TYPES, W, H, GAME_VERSION };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.NeonVoid = api;
 
