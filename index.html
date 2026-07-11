@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#030109">
+<meta name="description" content="NEON VOID - a fast neon vertical shooter. Play in your browser on desktop or mobile.">
+<!-- Add-to-home-screen: launch fullscreen + app-like on iOS and Android -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NEON VOID">
 <title>NEON VOID - A vertical shooter</title>
 <style>
   html, body {
@@ -15,7 +21,12 @@
     -webkit-tap-highlight-color: transparent;
     display: flex; align-items: center; justify-content: center;
   }
-  body { padding: 12px; box-sizing: border-box; touch-action: none; }
+  /* Respect notches / home indicators (iOS safe areas) so the canvas is never
+     clipped; falls back to a plain 12px on browsers without env() support. */
+  body {
+    box-sizing: border-box; touch-action: none;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
   canvas {
     image-rendering: auto;
     box-shadow: 0 0 60px rgba(77, 243, 255, 0.12), 0 0 120px rgba(255, 77, 240, 0.08);
@@ -25,7 +36,8 @@
   /* On-screen bomb button (touch devices only) - bottom-right; movement is
      full-width direct steering on the canvas itself, no joystick. */
   #nv-bomb-btn {
-    position: fixed; right: 18px; bottom: 22px; z-index: 70;
+    position: fixed; z-index: 70;
+    right: calc(18px + env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom));
     width: 66px; height: 66px; border-radius: 50%;
     display: none; align-items: center; justify-content: center;
     font-family: monospace; font-size: 30px; color: #ffdf9a;
@@ -56,7 +68,7 @@
 <!-- ?v bumped on each deploy so browsers never serve a stale build.
      Dev loads the src/ files in order (shared scope - data first, boot last);
      build-public.mjs collapses them into ONE minified game.js for the live site. -->
-<script src="game.js?v=65"></script>
-<script src="leaderboard.js?v=65"></script>
+<script src="game.js?v=66"></script>
+<script src="leaderboard.js?v=66"></script>
 </body>
 </html>
