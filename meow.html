@@ -9,6 +9,18 @@
 <meta name="mobile-web-app-capable" content="yes">
 <title>MEOW DREAMS</title>
 <style>
+  /* Bundled comic font (SIL OFL) - phones don't ship Comic Sans, and
+     Android's generic-cursive fallback is a flowy script that wrecks the
+     look. cat-theme.js nudges document.fonts.load() so the canvas gets it
+     immediately. build-public.mjs rewrites these paths for the live site. */
+  @font-face {
+    font-family: "Comic Neue"; font-style: normal; font-weight: 400; font-display: swap;
+    src: url("comic-neue-400.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Comic Neue"; font-style: normal; font-weight: 700; font-display: swap;
+    src: url("comic-neue-700.woff2") format("woff2");
+  }
   html, body {
     margin: 0; padding: 0; min-height: 100%;
     background: #ffeed6;
@@ -26,6 +38,13 @@
     padding-right: max(12px, env(safe-area-inset-right));
     padding-top: max(12px, env(safe-area-inset-top));
     padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  /* Phones: drop the 12px cushion (keep only the notch/home-bar safe areas)
+     so the playfield uses the full width; matches the pad in boot.js fit(). */
+  @media (hover: none) and (pointer: coarse) {
+    body {
+      padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    }
   }
   canvas#game {
     image-rendering: auto;
@@ -49,12 +68,12 @@
     position: fixed; inset: 0; z-index: 90; display: none;
     flex-direction: column; align-items: center; justify-content: center; gap: 12px;
     background: #ffeed6; color: #4a3630;
-    font-family: "Comic Sans MS","Comic Sans",cursive; text-align: center; padding: 20px;
+    font-family: "Comic Neue","Comic Sans MS","Comic Sans",cursive; text-align: center; padding: 20px;
   }
   @media (hover: none) and (pointer: coarse) and (orientation: landscape) { #nv-rotate { display: flex; } }
   #preview-banner {
     position: fixed; top: 3px; left: 50%; transform: translateX(-50%); z-index: 95;
-    font-family: "Comic Sans MS","Comic Sans",cursive; font-size: 10px; font-weight: 700; letter-spacing: .06em;
+    font-family: "Comic Neue","Comic Sans MS","Comic Sans",cursive; font-size: 10px; font-weight: 700; letter-spacing: .06em;
     white-space: nowrap;
     color: #fff6e8; background: #ff8fb3; padding: 2px 12px; border-radius: 12px;
     border: 2px solid #4a3630; box-shadow: 0 3px 10px rgba(74,54,48,0.25);
@@ -64,7 +83,7 @@
   #cat-codex {
     position: fixed; right: 14px; top: 50%; transform: translateY(-50%); z-index: 95;
     width: 235px; max-height: 94vh; overflow-y: auto;
-    font-family: "Comic Sans MS","Comic Sans",cursive; font-size: 11px; line-height: 1.3; color: #4a3630;
+    font-family: "Comic Neue","Comic Sans MS","Comic Sans",cursive; font-size: 11px; line-height: 1.3; color: #4a3630;
     background: rgba(255,246,232,0.96); border: 2px solid #4a3630;
     border-radius: 14px; padding: 10px 12px 12px;
   }
@@ -90,9 +109,9 @@
 </head>
 <body>
 <canvas id="game" width="480" height="720"></canvas>
-<div id="nv-bomb-btn" aria-label="bell">🔔</div>
+<div id="nv-bomb-btn" aria-label="bell"><svg width="36" height="37" viewBox="-9 -8.5 18 18.5" aria-hidden="true"><path d="M -6 -0.5 A 6 6 0 0 1 6 -0.5 L 7 3.6 L -7 3.6 Z" fill="#ffcf6b" stroke="#4a3630" stroke-width="1.6" stroke-linejoin="round"/><rect x="-6.5" y="3.6" width="13" height="1.6" fill="#4a3630"/><circle cx="0" cy="7.4" r="1.8" fill="#4a3630"/><circle cx="-2.2" cy="-2.4" r="1.4" fill="rgba(255,255,255,0.8)"/></svg></div>
 <div id="nv-rotate"><div class="ic">↻</div><div class="t1">ROTATE YOUR DEVICE</div><div class="t2">MEOW DREAMS plays in portrait</div></div>
 <div id="preview-banner">📖 FIELD GUIDE (tap or C)</div>
-<script src="meow.js?v=71"></script>
+<script src="meow.js?v=72"></script>
 </body>
 </html>
