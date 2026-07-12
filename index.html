@@ -22,31 +22,30 @@
     display: flex; align-items: center; justify-content: center;
   }
   /* The playfield is a fixed 480x720, so tall phone screens letterbox it.
-     Dress the letterbox as more of the void - same gradient family as the
-     in-game stage-1 sky plus faint nebulae - so the bars read as scenery,
-     not dead space. */
+     Dress the letterbox as more of the void: the gradient stops are CSS
+     variables that Render.draw() keeps in sync with the CURRENT stage's sky
+     palette, so the bars always match the game instead of clashing when the
+     stage colours change. Defaults below = the stage-1 palette. */
   body {
-    background:
-      radial-gradient(ellipse 62vw 38vh at 18% 10%, rgba(80,40,160,0.20), transparent 70%),
-      radial-gradient(ellipse 70vw 42vh at 84% 90%, rgba(200,60,140,0.14), transparent 70%),
-      linear-gradient(#060312, #0a0620 55%, #120a2e);
+    background: linear-gradient(var(--nv-top, #060312), var(--nv-mid, #0a0620) 55%, var(--nv-bot, #120a2e));
   }
-  /* Star specks for the letterbox (positions generated once, in vw/vh so any
-     screen size gets the same sky; the game canvas covers the middle ones). */
+  /* Letterbox stars: two layers drifting slowly downward like the in-game
+     starfield (motion is what reads as "stars" instead of dust). Each star
+     is listed twice, 100vh apart, so the 0 -> 100vh drift loops seamlessly.
+     Positions in vw/vh (generated once); the canvas covers the middle ones. */
   body::before, body::after {
     content: ""; position: fixed; left: 0; top: 0; width: 1px; height: 1px;
-    border-radius: 50%; pointer-events: none;
+    background: transparent; border-radius: 50%; pointer-events: none;
   }
-  body::before {
-    background: rgba(255,255,255,0.38);
-    animation: nv-twinkle 3.4s ease-in-out infinite alternate;
-    box-shadow: 27.7vw 72.6vh 0 0 rgba(255,255,255,0.38),69.8vw 94.1vh 0 0 rgba(255,255,255,0.38),41.3vw 72.0vh 0 0 rgba(255,255,255,0.38),37.7vw 41.4vh 0 0 rgba(255,255,255,0.38),57.7vw 66.1vh 0 0 rgba(255,255,255,0.38),46.7vw 1.4vh 0 0 rgba(255,255,255,0.38),62.6vw 10.0vh 0 0 rgba(255,255,255,0.38),23.7vw 9.1vh 0 0 rgba(255,255,255,0.38),4.6vw 31.9vh 0 0 rgba(255,255,255,0.38),8.4vw 81.7vh 0 0 rgba(255,255,255,0.38),72.8vw 59.7vh 0 0 rgba(255,255,255,0.38),29.9vw 26.9vh 0 0 rgba(255,255,255,0.38),44.1vw 12.6vh 0 0 rgba(255,255,255,0.38),38.1vw 85.4vh 0 0 rgba(255,255,255,0.38),99.6vw 75.3vh 0 0 rgba(255,255,255,0.38),92.7vw 78.7vh 0 0 rgba(255,255,255,0.38),89.8vw 35.3vh 0 0 rgba(255,255,255,0.38),58.0vw 89.0vh 0 0 rgba(255,255,255,0.38),45.1vw 4.8vh 0 0 rgba(255,255,255,0.38),26.8vw 86.1vh 0 0 rgba(255,255,255,0.38),8.8vw 24.4vh 0 0 rgba(255,255,255,0.38),43.6vw 62.9vh 0 0 rgba(255,255,255,0.38),45.6vw 79.0vh 0 0 rgba(255,255,255,0.38),66.6vw 49.9vh 0 0 rgba(255,255,255,0.38),44.0vw 62.8vh 0 0 rgba(255,255,255,0.38),57.5vw 68.2vh 0 0 rgba(255,255,255,0.38),12.4vw 50.2vh 0 0 rgba(255,255,255,0.38),80.3vw 95.3vh 0 0 rgba(255,255,255,0.38),52.2vw 95.0vh 0 0 rgba(255,255,255,0.38),23.8vw 1.1vh 0 0 rgba(255,255,255,0.38),78.0vw 62.2vh 0 0 rgba(255,255,255,0.38),24.9vw 70.1vh 0 0 rgba(255,255,255,0.38),63.5vw 91.4vh 0 0 rgba(255,255,255,0.38),0.3vw 49.7vh 0 0 rgba(255,255,255,0.38),74.2vw 46.7vh 0 0 rgba(255,255,255,0.38),89.6vw 23.6vh 0 0 rgba(255,255,255,0.38),95.1vw 92.1vh 0 0 rgba(255,255,255,0.38),16.5vw 45.2vh 0 0 rgba(255,255,255,0.38),71.4vw 86.5vh 0 0 rgba(255,255,255,0.38),20.8vw 84.6vh 0 0 rgba(255,255,255,0.38),25.5vw 47.9vh 0 0 rgba(255,255,255,0.38),95.3vw 4.0vh 0 0 rgba(255,255,255,0.38),68.7vw 89.6vh 0 0 rgba(255,255,255,0.38),39.1vw 22.9vh 0 0 rgba(255,255,255,0.38),90.2vw 15.2vh 0 0 rgba(255,255,255,0.38),90.4vw 14.6vh 0 0 rgba(255,255,255,0.38),16.5vw 38.4vh 0 0 rgba(255,255,255,0.38),69.9vw 9.0vh 0 0 rgba(255,255,255,0.38),16.7vw 25.9vh 0 0 rgba(255,255,255,0.38),58.9vw 90.8vh 0 0 rgba(255,255,255,0.38),21.9vw 46.3vh 0 0 rgba(255,255,255,0.38),87.1vw 70.7vh 0 0 rgba(255,255,255,0.38),15.2vw 95.0vh 0 0 rgba(255,255,255,0.38),41.4vw 67.5vh 0 0 rgba(255,255,255,0.38),70.6vw 56.1vh 0 0 rgba(255,255,255,0.38),56.7vw 25.1vh 0 0 rgba(255,255,255,0.38);
+  body::before { /* far layer: small, slow */
+    animation: nv-drift 96s linear infinite;
+    box-shadow: 41.9vw 96.3vh 0 1px rgba(255,255,255,0.55),41.9vw calc(96.3vh - 100vh) 0 1px rgba(255,255,255,0.55),70.6vw 83.6vh 0 1px rgba(255,255,255,0.55),70.6vw calc(83.6vh - 100vh) 0 1px rgba(255,255,255,0.55),10.1vw 64.9vh 0 1px rgba(214,236,255,0.6),10.1vw calc(64.9vh - 100vh) 0 1px rgba(214,236,255,0.6),15.1vw 80.6vh 0 0.7px rgba(214,236,255,0.6),15.1vw calc(80.6vh - 100vh) 0 0.7px rgba(214,236,255,0.6),1.8vw 44.1vh 0 1px rgba(255,255,255,0.55),1.8vw calc(44.1vh - 100vh) 0 1px rgba(255,255,255,0.55),52.4vw 11.5vh 0 1px rgba(255,255,255,0.55),52.4vw calc(11.5vh - 100vh) 0 1px rgba(255,255,255,0.55),53.2vw 40.3vh 0 0.7px rgba(255,255,255,0.55),53.2vw calc(40.3vh - 100vh) 0 0.7px rgba(255,255,255,0.55),57.2vw 12.8vh 0 1px rgba(255,255,255,0.55),57.2vw calc(12.8vh - 100vh) 0 1px rgba(255,255,255,0.55),0.4vw 86.4vh 0 0.7px rgba(214,236,255,0.6),0.4vw calc(86.4vh - 100vh) 0 0.7px rgba(214,236,255,0.6),32.9vw 48.3vh 0 0.7px rgba(214,236,255,0.6),32.9vw calc(48.3vh - 100vh) 0 0.7px rgba(214,236,255,0.6),42.5vw 75.3vh 0 1px rgba(255,255,255,0.55),42.5vw calc(75.3vh - 100vh) 0 1px rgba(255,255,255,0.55),45.2vw 62.7vh 0 0.7px rgba(255,255,255,0.55),45.2vw calc(62.7vh - 100vh) 0 0.7px rgba(255,255,255,0.55),70.1vw 21.9vh 0 1px rgba(214,236,255,0.6),70.1vw calc(21.9vh - 100vh) 0 1px rgba(214,236,255,0.6);
   }
-  body::after {
-    background: rgba(214,243,255,0.55);
-    box-shadow: 24.8vw 48.0vh 0 0.5px rgba(214,243,255,0.55),84.8vw 10.3vh 0 0.5px rgba(214,243,255,0.55),85.9vw 27.0vh 0 0.5px rgba(214,243,255,0.55),94.8vw 25.7vh 0 0.5px rgba(214,243,255,0.55),25.0vw 55.4vh 0 0.5px rgba(214,243,255,0.55),97.1vw 94.9vh 0 0.5px rgba(214,243,255,0.55),72.9vw 37.9vh 0 0.5px rgba(214,243,255,0.55),55.1vw 65.0vh 0 0.5px rgba(214,243,255,0.55),50.0vw 49.9vh 0 0.5px rgba(214,243,255,0.55),63.7vw 43.7vh 0 0.5px rgba(214,243,255,0.55),55.8vw 24.8vh 0 0.5px rgba(214,243,255,0.55),67.4vw 99.6vh 0 0.5px rgba(214,243,255,0.55),31.5vw 65.7vh 0 0.5px rgba(214,243,255,0.55),81.1vw 1.2vh 0 0.5px rgba(214,243,255,0.55),29.5vw 96.9vh 0 0.5px rgba(214,243,255,0.55),93.3vw 72.6vh 0 0.5px rgba(214,243,255,0.55),89.7vw 65.6vh 0 0.5px rgba(214,243,255,0.55),41.7vw 34.5vh 0 0.5px rgba(214,243,255,0.55),93.7vw 38.2vh 0 0.5px rgba(214,243,255,0.55),40.0vw 14.9vh 0 0.5px rgba(214,243,255,0.55),97.7vw 6.2vh 0 0.5px rgba(214,243,255,0.55),53.5vw 13.9vh 0 0.5px rgba(214,243,255,0.55),53.6vw 33.6vh 0 1px rgba(77,243,255,0.5),3.2vw 95.1vh 0 1px rgba(77,243,255,0.5),46.3vw 36.8vh 0 1px rgba(77,243,255,0.5),37.4vw 87.5vh 0 1px rgba(77,243,255,0.5),83.7vw 20.9vh 0 1px rgba(77,243,255,0.5),92.5vw 94.4vh 0 1px rgba(77,243,255,0.5),29.0vw 17.6vh 0 1px rgba(77,243,255,0.5);
+  body::after { /* near layer: bigger, brighter, glowing halo, faster */
+    animation: nv-drift 52s linear infinite;
+    box-shadow: 57.6vw 12.4vh 1px 1.2px rgba(255,184,228,0.6),57.6vw calc(12.4vh - 100vh) 1px 1.2px rgba(255,184,228,0.6),67.4vw 43.9vh 1px 1.2px rgba(255,255,255,0.85),67.4vw calc(43.9vh - 100vh) 1px 1.2px rgba(255,255,255,0.85),77.2vw 68.4vh 2px 1.4px rgba(255,255,255,0.85),77.2vw calc(68.4vh - 100vh) 2px 1.4px rgba(255,255,255,0.85),61.5vw 2.7vh 1px 1.2px rgba(255,184,228,0.6),61.5vw calc(2.7vh - 100vh) 1px 1.2px rgba(255,184,228,0.6),84.8vw 82.1vh 3px 1.6px rgba(255,255,255,0.85),84.8vw calc(82.1vh - 100vh) 3px 1.6px rgba(255,255,255,0.85),38.8vw 96.4vh 2px 1.4px rgba(154,223,255,0.8),38.8vw calc(96.4vh - 100vh) 2px 1.4px rgba(154,223,255,0.8),64.2vw 89.4vh 2px 1.4px rgba(154,223,255,0.8),64.2vw calc(89.4vh - 100vh) 2px 1.4px rgba(154,223,255,0.8),51.2vw 23.5vh 1px 1.2px rgba(255,255,255,0.85),51.2vw calc(23.5vh - 100vh) 1px 1.2px rgba(255,255,255,0.85),4.9vw 76.9vh 3px 1.6px rgba(255,184,228,0.6),4.9vw calc(76.9vh - 100vh) 3px 1.6px rgba(255,184,228,0.6);
   }
-  @keyframes nv-twinkle { from { opacity: 0.5; } to { opacity: 1; } }
+  @keyframes nv-drift { from { transform: translateY(0); } to { transform: translateY(100vh); } }
   /* Respect notches / home indicators (iOS safe areas) so the canvas is never
      clipped; falls back to a plain 12px on browsers without env() support. */
   body {
@@ -102,7 +101,7 @@
 <!-- ?v bumped on each deploy so browsers never serve a stale build.
      Dev loads the src/ files in order (shared scope - data first, boot last);
      build-public.mjs collapses them into ONE minified game.js for the live site. -->
-<script src="game.js?v=73"></script>
-<script src="leaderboard.js?v=73"></script>
+<script src="game.js?v=74"></script>
+<script src="leaderboard.js?v=74"></script>
 </body>
 </html>
